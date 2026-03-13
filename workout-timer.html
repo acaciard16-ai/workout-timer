@@ -1015,6 +1015,7 @@ function render() {
           <div class="exercise-info">
             <div class="exercise-name">${e.name}${e.optional ? '<span class="optional-tag">potential backfill</span>' : ''}</div>
             <div class="exercise-detail">${e.weight} &times; ${e.sets} sets &times; ${e.reps} reps &middot; ${e.work}s work / ${e.rest}s rest &middot; ${fmtTime(estTime(e))}</div>
+            ${e.notes ? `<div class="exercise-detail" style="color:#666;font-style:italic;margin-top:2px">${e.notes}</div>` : ''}
           </div>
           ${showStart ? `<button class="btn-start" onclick="startExercise(${globalIdx})">${e.done ? 'Redo' : 'Start'}</button>` : ''}
           <button class="btn-remove" onclick="openEditModal(${globalIdx})">✎</button>
