@@ -298,15 +298,33 @@ function getAudioCtx() {
   }
   return audioCtx;
 }
-// Unlock audio on first user tap (required for Safari/iOS)
-document.addEventListener("touchstart", function unlock() {
+// Unlock audio + speech on first user tap (required for Safari/iOS)
+function unlockAudio() {
   getAudioCtx();
-  document.removeEventListener("touchstart", unlock);
+}
+function unlockSpeech() {
+  if ('speechSynthesis' in window) {
+    const u = new SpeechSynthesisUtterance('');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+  }
+}
+document.addEventListener("touchstart", function unlock() {
+  unlockAudio();
+  unlockSpeech();
 }, { once: true });
 document.addEventListener("click", function unlock() {
-  getAudioCtx();
-  document.removeEventListener("click", unlock);
+  unlockAudio();
+  unlockSpeech();
 }, { once: true });
+
+// iOS Safari speechSynthesis keepalive — prevents silent stall after ~14s
+setInterval(function() {
+  if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+    window.speechSynthesis.pause();
+    window.speechSynthesis.resume();
+  }
+}, 10000);
 
 // ── VOICE ANNOUNCEMENTS ──
 function speak(text) {
