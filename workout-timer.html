@@ -6,7 +6,7 @@
 <title>Workout Timer</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; overflow-x: hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000; color: #e0e0e0; min-height: 100vh; overflow-x: hidden; }
 
   /* LIST VIEW — all fonts scale with viewport via clamp(phone, preferred, tv) */
   .list-view { padding: 28px; max-width: 900px; margin: 0 auto; }
@@ -81,21 +81,18 @@
   /* SCREEN BORDER TIMER */
   .border-timer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
   .border-timer svg { width: 100%; height: 100%; }
-  .border-timer .border-track { fill: none; stroke: #0a0a0a; stroke-linejoin: round; }
+  .border-timer .border-track { fill: none; stroke: #000; stroke-linejoin: round; }
   .border-timer .border-fill { fill: none; transition: stroke-dashoffset 0.8s linear; stroke-linecap: round; stroke-linejoin: round; }
 
   /* DRAG REORDER */
   .exercise-card { position: relative; }
-  .exercise-card.dragging { opacity: 0.4; transform: scale(0.97); }
-  .exercise-card.drag-over { border-top: 3px solid #4a6aff; }
-  .exercise-card.pick-selected { outline: 2px solid #4a6aff; outline-offset: -2px; background: #1a1a2e; }
+  .exercise-card.dragging { opacity: 0.3; }
+  .exercise-card.drag-over-above { border-top: 3px solid #4a6aff; margin-top: -3px; }
+  .exercise-card.drag-over-below { border-bottom: 3px solid #4a6aff; margin-bottom: -3px; }
 
-  /* REORDER BUTTONS */
-  .reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
-  .reorder-btns button { background: none; border: 1px solid #333; border-radius: 6px; color: #555; font-size: clamp(12px, 1.4vw, 22px); padding: 2px 6px; cursor: pointer; line-height: 1; }
-  .reorder-btns button:hover { background: #222; color: #aaa; }
-  .reorder-btns button:disabled { opacity: 0.2; cursor: default; }
-  .reorder-btns button.pick-target { border-color: #4a6aff; color: #4a6aff; }
+  /* DRAG HANDLE */
+  .drag-handle { flex-shrink: 0; color: #333; font-size: clamp(18px, 2vw, 32px); cursor: grab; padding: 8px 4px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .drag-handle:active { cursor: grabbing; color: #666; }
 
   .timer-controls { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
   .timer-controls button { border: none; border-radius: 14px; padding: 16px 36px; cursor: pointer; font-size: clamp(22px, 5.5vw, 52px); font-weight: 600; }
@@ -488,55 +485,136 @@ function saveExercise() {
   closeModal();
 }
 
-// ── DRAG REORDER (Desktop + Touch) ──
+// ── DRAG REORDER ──
 let dragIdx = null;
+let dragY = 0;
+let dragCard = null;
+let dragCards = [];
+let dragScrollFrame = null;
+
+function getDragCards() {
+  return Array.from(document.querySelectorAll(".exercise-card[data-idx]"));
+}
+
+function getDropTarget(y) {
+  for (const c of dragCards) {
+    const idx = parseInt(c.dataset.idx);
+    if (idx === dragIdx) continue;
+    const r = c.getBoundingClientRect();
+    const mid = r.top + r.height / 2;
+    if (y < mid) return { idx, pos: "above" };
+  }
+  // Below all cards
+  const lastIdx = dragCards.length ? parseInt(dragCards[dragCards.length - 1].dataset.idx) : null;
+  return lastIdx !== null && lastIdx !== dragIdx ? { idx: lastIdx, pos: "below" } : null;
+}
+
+function clearDragHighlights() {
+  document.querySelectorAll(".exercise-card").forEach(c =>
+    c.classList.remove("dragging", "drag-over-above", "drag-over-below"));
+}
 
 // Desktop HTML5 drag
 function onDragStart(e, i) {
   dragIdx = i;
+  dragCards = getDragCards();
   e.dataTransfer.effectAllowed = "move";
   e.target.closest(".exercise-card").classList.add("dragging");
 }
-function onDragEnd(e) {
-  dragIdx = null;
-  document.querySelectorAll(".exercise-card").forEach(c => c.classList.remove("dragging", "drag-over"));
-}
+function onDragEnd(e) { dragIdx = null; clearDragHighlights(); }
 function onDragOver(e, i) {
   e.preventDefault();
   e.dataTransfer.dropEffect = "move";
-  document.querySelectorAll(".exercise-card").forEach(c => c.classList.remove("drag-over"));
-  if (i !== dragIdx) e.target.closest(".exercise-card").classList.add("drag-over");
+  clearDragHighlights();
+  if (dragIdx === null) return;
+  document.querySelector(`.exercise-card[data-idx="${dragIdx}"]`)?.classList.add("dragging");
+  const target = getDropTarget(e.clientY);
+  if (target) {
+    const card = document.querySelector(`.exercise-card[data-idx="${target.idx}"]`);
+    if (card) card.classList.add(target.pos === "above" ? "drag-over-above" : "drag-over-below");
+  }
 }
 function onDrop(e, i) {
   e.preventDefault();
-  if (dragIdx === null || dragIdx === i) return;
-  const moved = exercises.splice(dragIdx, 1)[0];
-  exercises.splice(i, 0, moved);
+  if (dragIdx === null) return;
+  const target = getDropTarget(e.clientY);
+  if (!target) { dragIdx = null; clearDragHighlights(); return; }
+  let toIdx = target.idx;
+  if (target.pos === "below") toIdx++;
+  if (toIdx > dragIdx) toIdx--;
+  if (toIdx !== dragIdx) {
+    const moved = exercises.splice(dragIdx, 1)[0];
+    exercises.splice(toIdx, 0, moved);
+    saveState();
+  }
   dragIdx = null;
-  saveState();
+  clearDragHighlights();
   render();
 }
 
-// Pick-and-place reorder (touch-friendly, no drag lag)
-let pickedIdx = null;
+// Touch drag (Safari / iOS) — uses transform for smooth 60fps movement
+function onTouchDragStart(e, i) {
+  e.preventDefault();
+  dragIdx = i;
+  dragCards = getDragCards();
+  dragCard = e.target.closest(".exercise-card");
+  dragY = e.touches[0].clientY;
+  dragCard.classList.add("dragging");
+  dragCard.style.position = "relative";
+  dragCard.style.zIndex = "100";
+  document.body.style.overflow = "hidden";
+}
 
-function togglePick(i) {
-  if (pickedIdx === null) {
-    // Pick up
-    pickedIdx = i;
-    render();
-  } else if (pickedIdx === i) {
-    // Cancel pick
-    pickedIdx = null;
-    render();
-  } else {
-    // Place: move picked exercise to this position
-    const moved = exercises.splice(pickedIdx, 1)[0];
-    exercises.splice(i, 0, moved);
-    pickedIdx = null;
-    saveState();
-    render();
+function onTouchDragMove(e) {
+  if (dragIdx === null || !dragCard) return;
+  e.preventDefault();
+  const y = e.touches[0].clientY;
+  const dy = y - dragY;
+  dragCard.style.transform = `translateY(${dy}px)`;
+  dragCard.style.opacity = "0.85";
+
+  // Highlight drop target
+  clearDragHighlights();
+  dragCard.classList.add("dragging");
+  const target = getDropTarget(y);
+  if (target) {
+    const card = document.querySelector(`.exercise-card[data-idx="${target.idx}"]`);
+    if (card) card.classList.add(target.pos === "above" ? "drag-over-above" : "drag-over-below");
   }
+
+  // Auto-scroll near edges
+  const margin = 60;
+  const scrollEl = document.scrollingElement || document.documentElement;
+  if (y < margin) scrollEl.scrollTop -= 8;
+  else if (y > window.innerHeight - margin) scrollEl.scrollTop += 8;
+}
+
+function onTouchDragEnd(e) {
+  if (dragIdx === null || !dragCard) return;
+  const y = e.changedTouches[0].clientY;
+  const target = getDropTarget(y);
+
+  // Clean up styles
+  dragCard.style.transform = "";
+  dragCard.style.position = "";
+  dragCard.style.zIndex = "";
+  dragCard.style.opacity = "";
+  clearDragHighlights();
+  document.body.style.overflow = "";
+
+  if (target) {
+    let toIdx = target.idx;
+    if (target.pos === "below") toIdx++;
+    if (toIdx > dragIdx) toIdx--;
+    if (toIdx !== dragIdx) {
+      const moved = exercises.splice(dragIdx, 1)[0];
+      exercises.splice(toIdx, 0, moved);
+      saveState();
+    }
+  }
+  dragIdx = null;
+  dragCard = null;
+  render();
 }
 
 // ── WAKE LOCK ──
@@ -561,17 +639,6 @@ document.addEventListener('visibilitychange', () => {
     requestWakeLock();
   }
 });
-
-// ── TOUCH REORDER ──
-function moveExercise(i, direction) {
-  const j = i + direction;
-  if (j < 0 || j >= exercises.length) return;
-  const temp = exercises[i];
-  exercises[i] = exercises[j];
-  exercises[j] = temp;
-  saveState();
-  render();
-}
 
 // ── ADD/EDIT EXERCISE MODAL ──
 let modalOpen = false;
@@ -657,15 +724,14 @@ function render() {
     const renderCard = (e, i) => {
       const globalIdx = exercises.indexOf(e);
       return `
-        <div class="exercise-card ${e.done ? 'done' : ''} ${e.optional ? 'optional' : ''} ${pickedIdx === globalIdx ? 'pick-selected' : ''}"
+        <div class="exercise-card ${e.done ? 'done' : ''} ${e.optional ? 'optional' : ''}"
           data-idx="${globalIdx}"
-          draggable="true" ondragstart="onDragStart(event,${globalIdx})" ondragend="onDragEnd(event)"
           ondragover="onDragOver(event,${globalIdx})" ondrop="onDrop(event,${globalIdx})">
-          <div class="reorder-btns">
-            <button onclick="event.stopPropagation();moveExercise(${globalIdx},-1)" ${globalIdx === 0 ? 'disabled' : ''}>▲</button>
-            <button onclick="event.stopPropagation();togglePick(${globalIdx})" class="${pickedIdx !== null && pickedIdx !== globalIdx ? 'pick-target' : ''}">${pickedIdx === globalIdx ? '⊗' : pickedIdx !== null ? '⊕' : '⇅'}</button>
-            <button onclick="event.stopPropagation();moveExercise(${globalIdx},1)" ${globalIdx === exercises.length - 1 ? 'disabled' : ''}>▼</button>
-          </div>
+          <span class="drag-handle" draggable="true"
+            ondragstart="onDragStart(event,${globalIdx})" ondragend="onDragEnd(event)"
+            ontouchstart="onTouchDragStart(event,${globalIdx})"
+            ontouchmove="onTouchDragMove(event)"
+            ontouchend="onTouchDragEnd(event)">☰</span>
           <div class="tick-box ${e.done ? 'checked' : ''}" onclick="toggleDone(${globalIdx})">${e.done ? '✓' : ''}</div>
           <div class="exercise-info">
             <div class="exercise-name">${e.name}${e.optional ? '<span class="optional-tag">pick one</span>' : ''}</div>
