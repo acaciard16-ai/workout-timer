@@ -86,8 +86,10 @@
 
   /* DRAG REORDER */
   .exercise-card { position: relative; }
-  .exercise-card.dragging { opacity: 0.4; }
+  .exercise-card.dragging { opacity: 0.4; transform: scale(0.97); }
   .exercise-card.drag-over { border-top: 3px solid #4a6aff; }
+  .exercise-card.touch-dragging { opacity: 0.85; position: fixed; z-index: 1000; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,0.5); transform: scale(1.03); width: calc(100% - 32px); left: 16px; }
+  .drop-placeholder { border: 2px dashed #4a6aff; border-radius: 12px; min-height: 60px; margin: 6px 0; }
 
   /* TOUCH REORDER BUTTONS */
   .reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
@@ -269,9 +271,29 @@ const BEEPS = [
   { f: 330, d: 500 },   // 4: 10-second warning (low double-beep)
 ];
 
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+  return audioCtx;
+}
+// Unlock audio on first user tap (required for Safari/iOS)
+document.addEventListener("touchstart", function unlock() {
+  getAudioCtx();
+  document.removeEventListener("touchstart", unlock);
+}, { once: true });
+document.addEventListener("click", function unlock() {
+  getAudioCtx();
+  document.removeEventListener("click", unlock);
+}, { once: true });
+
 function beep(type) {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = getAudioCtx();
     const b = BEEPS[type];
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -462,27 +484,25 @@ function saveExercise() {
   closeModal();
 }
 
-// ── DRAG REORDER ──
+// ── DRAG REORDER (Desktop + Touch) ──
 let dragIdx = null;
 
+// Desktop HTML5 drag
 function onDragStart(e, i) {
   dragIdx = i;
   e.dataTransfer.effectAllowed = "move";
   e.target.closest(".exercise-card").classList.add("dragging");
 }
-
 function onDragEnd(e) {
   dragIdx = null;
   document.querySelectorAll(".exercise-card").forEach(c => c.classList.remove("dragging", "drag-over"));
 }
-
 function onDragOver(e, i) {
   e.preventDefault();
   e.dataTransfer.dropEffect = "move";
   document.querySelectorAll(".exercise-card").forEach(c => c.classList.remove("drag-over"));
   if (i !== dragIdx) e.target.closest(".exercise-card").classList.add("drag-over");
 }
-
 function onDrop(e, i) {
   e.preventDefault();
   if (dragIdx === null || dragIdx === i) return;
@@ -491,6 +511,91 @@ function onDrop(e, i) {
   dragIdx = null;
   saveState();
   render();
+}
+
+// Touch drag (Safari / iOS)
+let touchDragIdx = null;
+let touchClone = null;
+let touchStartY = 0;
+let touchLongPress = null;
+let touchActive = false;
+
+function getCardIndexAtY(y) {
+  const cards = document.querySelectorAll(".exercise-card:not(.touch-dragging)");
+  for (let c of cards) {
+    const r = c.getBoundingClientRect();
+    if (y >= r.top && y <= r.bottom) {
+      const idx = parseInt(c.dataset.idx);
+      return isNaN(idx) ? null : idx;
+    }
+  }
+  return null;
+}
+
+function onTouchReorderStart(e, i) {
+  touchStartY = e.touches[0].clientY;
+  touchDragIdx = i;
+  touchActive = false;
+  // Long-press to activate drag (300ms)
+  touchLongPress = setTimeout(() => {
+    touchActive = true;
+    const card = e.target.closest(".exercise-card");
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    touchClone = card.cloneNode(true);
+    touchClone.classList.add("touch-dragging");
+    touchClone.style.top = rect.top + "px";
+    document.body.appendChild(touchClone);
+    card.classList.add("dragging");
+    // Prevent scroll while dragging
+    document.body.style.overflow = "hidden";
+  }, 300);
+}
+
+function onTouchReorderMove(e) {
+  if (!touchActive || touchClone === null) {
+    // Cancel long-press if finger moves too much before activation
+    if (touchLongPress && Math.abs(e.touches[0].clientY - touchStartY) > 10) {
+      clearTimeout(touchLongPress);
+      touchLongPress = null;
+    }
+    return;
+  }
+  e.preventDefault();
+  const y = e.touches[0].clientY;
+  touchClone.style.top = (y - 30) + "px";
+
+  // Highlight drop target
+  document.querySelectorAll(".exercise-card").forEach(c => c.classList.remove("drag-over"));
+  const overIdx = getCardIndexAtY(y);
+  if (overIdx !== null && overIdx !== touchDragIdx) {
+    const overCard = document.querySelector(`.exercise-card[data-idx="${overIdx}"]`);
+    if (overCard) overCard.classList.add("drag-over");
+  }
+}
+
+function onTouchReorderEnd(e) {
+  clearTimeout(touchLongPress);
+  touchLongPress = null;
+  if (!touchActive) { touchDragIdx = null; return; }
+
+  const y = e.changedTouches[0].clientY;
+  const targetIdx = getCardIndexAtY(y);
+
+  // Clean up
+  if (touchClone) { touchClone.remove(); touchClone = null; }
+  document.querySelectorAll(".exercise-card").forEach(c => c.classList.remove("dragging", "drag-over"));
+  document.body.style.overflow = "";
+
+  if (targetIdx !== null && targetIdx !== touchDragIdx) {
+    const moved = exercises.splice(touchDragIdx, 1)[0];
+    exercises.splice(targetIdx, 0, moved);
+    saveState();
+    render();
+  }
+
+  touchDragIdx = null;
+  touchActive = false;
 }
 
 // ── WAKE LOCK ──
@@ -587,13 +692,13 @@ function renderBorderTimer(phase, time) {
   const h = 1000;
   const path = `M ${w/2} ${m} L ${w-m} ${m} L ${w-m} ${h-m} L ${m} ${h-m} L ${m} ${m} Z`;
   const perim = 2 * (w - sw) + 2 * (h - sw);
-  const offset = perim * (1 - pct);
+  const offset = perim * pct;
   return `
     <div class="border-timer">
       <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
         <path class="border-track" d="${path}" stroke-width="${sw}" />
         <path class="border-fill" d="${path}" stroke-width="${sw}"
-          stroke="${strokeColor}" stroke-dasharray="${perim}" stroke-dashoffset="${offset}" />
+          stroke="${strokeColor}" stroke-dasharray="${perim}" stroke-dashoffset="-${offset}" />
       </svg>
     </div>`;
 }
@@ -612,8 +717,11 @@ function render() {
       const globalIdx = exercises.indexOf(e);
       return `
         <div class="exercise-card ${e.done ? 'done' : ''} ${e.optional ? 'optional' : ''}"
+          data-idx="${globalIdx}"
           draggable="true" ondragstart="onDragStart(event,${globalIdx})" ondragend="onDragEnd(event)"
-          ondragover="onDragOver(event,${globalIdx})" ondrop="onDrop(event,${globalIdx})">
+          ondragover="onDragOver(event,${globalIdx})" ondrop="onDrop(event,${globalIdx})"
+          ontouchstart="onTouchReorderStart(event,${globalIdx})" ontouchmove="onTouchReorderMove(event)"
+          ontouchend="onTouchReorderEnd(event)">
           <div class="reorder-btns">
             <button onclick="moveExercise(${globalIdx},-1)" ${globalIdx === 0 ? 'disabled' : ''}>▲</button>
             <button onclick="moveExercise(${globalIdx},1)" ${globalIdx === exercises.length - 1 ? 'disabled' : ''}>▼</button>
