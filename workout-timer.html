@@ -161,14 +161,15 @@ function hashCode(str) {
 
 function loadExercises() {
   let data = EXERCISES_DATA;
-  // URL hash override: #base64-encoded JSON array of exercises
+  // Check ?w= query param first (clickable in calendar links), then #hash fallback
   try {
-    const hash = window.location.hash.slice(1);
-    if (hash) {
-      const decoded = JSON.parse(atob(hash));
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get("w") || window.location.hash.slice(1);
+    if (encoded) {
+      const decoded = JSON.parse(atob(encoded));
       if (Array.isArray(decoded) && decoded.length) {
         data = decoded;
-        saveKey = "wt-" + hashCode(hash);
+        saveKey = "wt-" + hashCode(encoded);
       }
     }
   } catch (e) {}
