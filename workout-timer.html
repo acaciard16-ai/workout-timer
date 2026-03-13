@@ -19,6 +19,15 @@
   .section-label { font-size: clamp(11px, 1.2vw, 22px); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #555; margin: 20px 0 10px; padding-left: 4px; }
 
   .exercise-card { display: flex; align-items: center; gap: 16px; background: #1a1a1a; border-radius: 14px; padding: 16px 20px; border: 1px solid #2a2a2a; margin-bottom: 10px; transition: all 0.3s; }
+  /* Superset visual grouping */
+  .exercise-card.ss-top { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0; border-bottom: 1px dashed #4a6aff; }
+  .exercise-card.ss-mid { border-radius: 0; margin-bottom: 0; border-bottom: 1px dashed #4a6aff; border-top: none; }
+  .exercise-card.ss-bot { border-top-left-radius: 0; border-top-right-radius: 0; border-top: none; }
+  .exercise-card.ss-top, .exercise-card.ss-mid, .exercise-card.ss-bot { border-color: #3a4a6a; }
+  .ss-label { font-size: clamp(9px, 1vw, 16px); color: #4a6aff; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; padding-left: 52px; }
+  .ss-breadcrumb { display: flex; flex-wrap: wrap; gap: clamp(4px, 1vw, 10px); align-items: center; justify-content: center; margin-top: 24px; width: 100%; padding: 0 12px; box-sizing: border-box; }
+  .ss-breadcrumb span { font-size: clamp(14px, 3.2vw, 26px); transition: color 0.3s; white-space: nowrap; }
+  .ss-breadcrumb .ss-arrow { font-size: clamp(12px, 2.5vw, 22px); }
   .exercise-card.done { background: #0d1a0d; border-color: #2a4a2a; opacity: 0.7; }
   .exercise-card.optional { border-style: dashed; border-color: #333; }
   .exercise-card.optional .exercise-name { color: #aaa; }
@@ -72,7 +81,7 @@
   .timer-meta { display: flex; gap: 28px; font-size: clamp(22px, 5.5vw, 52px); color: #888; margin-bottom: 28px; }
   .timer-meta .set-num { color: #fff; font-weight: 700; font-size: clamp(26px, 6vw, 58px); }
   .timer-progress { display: flex; flex-wrap: wrap; gap: clamp(4px, 0.5vw, 10px); width: 80%; max-width: 700px; margin-bottom: 40px; justify-content: center; }
-  .timer-progress .set-block { flex: 0 0 calc((100% - 4 * clamp(4px, 0.5vw, 10px)) / 5); height: clamp(10px, 1.2vw, 20px); border-radius: 4px; background: #333; transition: background 0.3s; }
+  .timer-progress .set-block { flex: 1 1 0; min-width: 0; height: clamp(10px, 1.2vw, 20px); border-radius: 4px; background: #333; transition: background 0.3s; }
   .timer-progress .set-block.done { background: #fff; }
   .timer-progress .set-block.active-work { background: #ff6a4a; }
   .timer-progress .set-block.active-rest { background: #4ac4c4; }
@@ -116,7 +125,7 @@
   .timer-left, .timer-right { display: contents; }
 
   @media (orientation: landscape) {
-    .timer-view { flex-direction: row; gap: 4vw; padding: 2vh 4vw; }
+    .timer-view { flex-direction: row; flex-wrap: wrap; gap: 4vw; padding: 2vh 4vw; }
     .timer-left { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; }
     .timer-right { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; }
     .timer-exercise-name { font-size: clamp(28px, 6vh, 80px); }
@@ -129,6 +138,9 @@
     .timer-progress .set-block { height: clamp(12px, 2vh, 28px); }
     .timer-controls button { font-size: clamp(22px, 4vh, 56px); padding: 2vh 4vw; }
     .btn-back { top: 1.5vh; left: 1.5vw; font-size: clamp(18px, 3vh, 44px); }
+    .ss-breadcrumb { flex-basis: 100%; margin-top: 0; gap: clamp(8px, 1.5vw, 18px); justify-content: center; }
+    .ss-breadcrumb span { font-size: clamp(28px, 5vh, 60px); }
+    .ss-breadcrumb .ss-arrow { font-size: clamp(24px, 4vh, 50px); }
   }
 
   @media (max-width: 600px) {
@@ -173,7 +185,7 @@ function loadExercises() {
     }
   } catch (e) {}
   sourceData = data;
-  exercises = data.map(e => ({ ...e, done: false }));
+  exercises = data.map(e => ({ ...e, done: false, linkedToNext: e.linkedToNext || false }));
   loadState();
   render();
 }
@@ -186,6 +198,12 @@ let state = {
   phase: "idle",
   pausedFrom: "work",
   time: 0,
+  // Superset tracking
+  ssGroup: [],     // all exercise indices in the superset
+  ssActive: [],    // currently active (not yet finished) exercise indices
+  ssPos: 0,        // position within ssActive for current round
+  ssRound: 1,      // current round number (for display)
+  ssSetsLeft: {},  // { exIdx: setsRemaining } — per-exercise countdown
 };
 
 let timerInterval = null;
@@ -196,7 +214,7 @@ function saveState() {
       exercises: exercises.map(e => ({
         name: e.name, done: e.done, weight: e.weight,
         sets: e.sets, reps: e.reps, work: e.work, rest: e.rest,
-        optional: e.optional,
+        optional: e.optional, linkedToNext: e.linkedToNext || false,
       })),
       savedAt: new Date().toISOString(),
     };
@@ -220,7 +238,7 @@ function loadState() {
 function clearSavedState() {
   try { localStorage.removeItem(saveKey); } catch (e) {}
   // Revert to this source's original exercises
-  exercises = sourceData.map(e => ({ ...e, done: false }));
+  exercises = sourceData.map(e => ({ ...e, done: false, linkedToNext: e.linkedToNext || false }));
   render();
 }
 
@@ -314,6 +332,40 @@ function beep(type) {
   } catch (e) {}
 }
 
+// ── SUPERSET HELPERS ──
+// Get the full superset group starting from any member
+function getSupersetGroup(idx) {
+  // Walk backward to find the start of the chain
+  let start = idx;
+  while (start > 0 && exercises[start - 1] && exercises[start - 1].linkedToNext) start--;
+  // Walk forward to collect all members
+  const group = [start];
+  let cur = start;
+  while (cur < exercises.length && exercises[cur].linkedToNext) {
+    cur++;
+    if (cur < exercises.length) group.push(cur);
+  }
+  return group;
+}
+
+function isInSuperset(idx) {
+  return getSupersetGroup(idx).length > 1;
+}
+
+// Rest between rounds = max rest of all currently active exercises
+// 20 distinct exercise colors (avoids #ff6a4a, #4ac4c4, #ffaa00, #4aff7a, #4a6aff, #fff, #333)
+const ssColors = [
+  "#ff6a4a", "#e06cf0", "#c8e64a", "#ff5eaa", "#b48aff",
+  "#f5a623", "#58d68d", "#ff8c42", "#c490ff", "#f0e040",
+  "#ff6b9d", "#22e0a0", "#ffd166", "#ff7eb3", "#a0d911",
+  "#d4a5ff", "#ffa07a", "#d94f9e", "#bae637", "#ff9a76"
+];
+function ssExColor(groupPos) { return ssColors[groupPos % ssColors.length]; }
+
+function ssActiveRest() {
+  return Math.max(0, ...state.ssActive.map(idx => exercises[idx].rest));
+}
+
 // ── HELPERS ──
 function fmtTime(s) {
   if (s <= 60) return String(s);
@@ -324,17 +376,120 @@ function estTime(e) {
   return e.work * e.sets + e.rest * (e.sets - 1);
 }
 
+function estSupersetTime(group) {
+  // Simulate the superset timer to get exact time
+  const setsLeft = {};
+  let active = [...group];
+  group.forEach(idx => { setsLeft[idx] = exercises[idx].sets; });
+  let total = 0;
+  while (active.length > 0) {
+    // Work phase: each active exercise does work + 5s buffer between them
+    active.forEach((idx, i) => { total += exercises[idx].work + (i > 0 ? 5 : 0); });
+    // Decrement sets
+    active.forEach(idx => { setsLeft[idx]--; });
+    active = active.filter(idx => setsLeft[idx] > 0);
+    // Rest (max of remaining active exercises)
+    if (active.length > 0) {
+      total += Math.max(0, ...active.map(idx => exercises[idx].rest));
+    }
+  }
+  return total;
+}
+
+function estWorkoutTime() {
+  let total = 0;
+  const visited = new Set();
+  for (let i = 0; i < exercises.length; i++) {
+    if (visited.has(i) || exercises[i].done || exercises[i].optional) continue;
+    const group = getSupersetGroup(i);
+    group.forEach(idx => visited.add(idx));
+    const activeGroup = group.filter(idx => !exercises[idx].done);
+    if (activeGroup.length === 0) continue;
+    if (activeGroup.length === 1) {
+      total += estTime(exercises[activeGroup[0]]);
+    } else {
+      total += estSupersetTime(activeGroup);
+    }
+  }
+  return total;
+}
+
 function clearTimerInterval() {
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 }
 
 function totalRemaining() {
-  const ex = exercises[state.exIdx];
-  if (!ex) return 0;
-  if (state.phase === "work") return state.time + (ex.sets - state.set) * (ex.work + ex.rest) - ex.rest;
-  if (state.phase === "rest") return state.time + (ex.sets - state.set) * (ex.work + ex.rest) + ex.work - ex.rest;
-  if (state.phase === "countdown") return ex.work * ex.sets + ex.rest * (ex.sets - 1);
-  return 0;
+  const inSuperset = state.ssGroup.length > 1;
+
+  if (!inSuperset) {
+    const ex = exercises[state.exIdx];
+    if (!ex) return 0;
+    // During work on set S of N: current time + rest after this set + remaining (N-S) sets of (work+rest) - final rest
+    if (state.phase === "work") {
+      const setsAfter = ex.sets - state.set; // sets remaining after current
+      return state.time + (setsAfter > 0 ? ex.rest : 0) + setsAfter * ex.work + Math.max(0, setsAfter - 1) * ex.rest;
+    }
+    // During rest after set S of N: current time + remaining (N-S) sets of work + (N-S-1) rests between them
+    if (state.phase === "rest") {
+      const setsAfter = ex.sets - state.set; // sets remaining after current
+      return state.time + setsAfter * ex.work + Math.max(0, setsAfter - 1) * ex.rest;
+    }
+    if (state.phase === "countdown") return ex.work * ex.sets + ex.rest * (ex.sets - 1);
+    return 0;
+  }
+
+  // Superset: simulate remaining time exactly
+  let rem = state.time; // current phase time remaining
+
+  // Clone state for simulation
+  const simSets = { ...state.ssSetsLeft };
+  let simActive = [...state.ssActive];
+  let simPos = state.ssPos;
+  let simPhase = state.phase;
+
+  // Walk through the remaining phases step by step
+  while (true) {
+    if (simPhase === "countdown") {
+      // After countdown, first exercise work starts
+      simPhase = "work";
+      simPos = 0;
+      rem += exercises[simActive[0]].work;
+    } else if (simPhase === "buffer") {
+      // Buffer done, start work
+      simPhase = "work";
+      rem += exercises[simActive[simPos]].work;
+    } else if (simPhase === "work") {
+      if (simPos < simActive.length - 1) {
+        // 5s buffer before next exercise
+        simPos++;
+        rem += 5;
+        simPhase = "buffer";
+      } else {
+        // End of round — decrement sets
+        simActive.forEach(idx => { simSets[idx]--; });
+        simActive = simActive.filter(idx => simSets[idx] > 0);
+        if (simActive.length === 0) break; // all done
+        const restTime = Math.max(0, ...simActive.map(idx => exercises[idx].rest));
+        if (restTime > 0) {
+          rem += restTime;
+          simPhase = "rest";
+        } else {
+          // No rest, start next round
+          simPos = 0;
+          rem += exercises[simActive[0]].work;
+        }
+      }
+    } else if (simPhase === "rest") {
+      // After rest, start next round
+      simPos = 0;
+      simPhase = "work";
+      rem += exercises[simActive[0]].work;
+    } else {
+      break;
+    }
+  }
+
+  return Math.max(0, rem);
 }
 
 // ── TICK ──
@@ -360,37 +515,101 @@ function startInterval() {
 
 function onTimerZero() {
   const ex = exercises[state.exIdx];
+  const inSuperset = state.ssGroup.length > 1;
+
   if (state.phase === "countdown") {
     state.phase = "work";
     state.time = ex.work;
     beep(0);
     startInterval();
-  } else if (state.phase === "work") {
-    if (state.set >= ex.sets) {
-      state.phase = "done";
-      beep(3);
-      exercises[state.exIdx].done = true;
-      saveState();
-    } else {
-      state.phase = "rest";
-      state.time = ex.rest;
-      beep(1);
-      startInterval();
+    return;
+  }
+
+  // Solo exercise (not a superset)
+  if (!inSuperset) {
+    if (state.phase === "work") {
+      if (state.set >= ex.sets) {
+        state.phase = "done"; beep(3);
+        exercises[state.exIdx].done = true; saveState();
+      } else if (ex.rest === 0) {
+        state.set++; state.phase = "work"; state.time = ex.work; beep(0); startInterval();
+      } else {
+        state.phase = "rest"; state.time = ex.rest; beep(1); startInterval();
+      }
+    } else if (state.phase === "rest") {
+      state.set++; state.phase = "work"; state.time = ex.work; beep(0); startInterval();
     }
-  } else if (state.phase === "rest") {
-    state.set++;
+    return;
+  }
+
+  // ── SUPERSET LOGIC ──
+  if (state.phase === "work") {
+    // Is there another active exercise to do in this round?
+    if (state.ssPos < state.ssActive.length - 1) {
+      // 5-second buffer before next exercise
+      state.phase = "buffer";
+      state.ssPos++;
+      state.exIdx = state.ssActive[state.ssPos];
+      state.time = 5;
+      beep(2);
+      startInterval();
+    } else {
+      // End of round — decrement sets for all active exercises
+      state.ssActive.forEach(idx => { state.ssSetsLeft[idx]--; });
+      // Remove exercises that are now done
+      const finished = state.ssActive.filter(idx => state.ssSetsLeft[idx] <= 0);
+      finished.forEach(idx => { exercises[idx].done = true; });
+      state.ssActive = state.ssActive.filter(idx => state.ssSetsLeft[idx] > 0);
+
+      if (state.ssActive.length === 0) {
+        // All exercises complete
+        state.phase = "done"; beep(3); saveState();
+      } else {
+        const restTime = ssActiveRest();
+        if (restTime === 0) {
+          // No rest — straight to next round
+          state.ssRound++;
+          state.ssPos = 0;
+          state.exIdx = state.ssActive[0];
+          state.time = exercises[state.exIdx].work;
+          beep(0); startInterval();
+        } else {
+          state.phase = "rest"; state.time = restTime; beep(1); startInterval();
+        }
+      }
+      if (finished.length) saveState();
+    }
+  } else if (state.phase === "buffer") {
+    // Buffer done — start this exercise's work
     state.phase = "work";
-    state.time = ex.work;
-    beep(0);
-    startInterval();
+    state.time = exercises[state.exIdx].work;
+    beep(0); startInterval();
+  } else if (state.phase === "rest") {
+    // Start next round
+    state.ssRound++;
+    state.ssPos = 0;
+    state.exIdx = state.ssActive[0];
+    state.phase = "work";
+    state.time = exercises[state.exIdx].work;
+    beep(0); startInterval();
   }
 }
 
 // ── ACTIONS ──
 function startExercise(i) {
+  const group = getSupersetGroup(i);
+  // Reset done flags for all exercises in the group (handles Redo)
+  group.forEach(idx => { exercises[idx].done = false; });
+  saveState();
   state.view = "timer";
-  state.exIdx = i;
-  state.set = 1;
+  state.exIdx = group[0];
+  state.ssGroup = group;
+  state.ssActive = [...group];
+  state.ssPos = 0;
+  state.ssRound = 1;
+  state.ssSetsLeft = {};
+  group.forEach(idx => { state.ssSetsLeft[idx] = exercises[idx].sets; });
+  state.set = 1; // still used for solo exercises
   state.phase = "countdown";
   state.time = 5;
   requestWakeLock();
@@ -413,26 +632,9 @@ function resume() {
 
 function skip() {
   clearTimerInterval();
-  const ex = exercises[state.exIdx];
-  if (state.phase === "countdown") {
-    state.phase = "work";
-    state.time = ex.work;
-    beep(0);
-    startInterval();
-  } else if (state.phase === "work" || state.phase === "paused") {
-    if (state.set >= ex.sets) {
-      state.phase = "done"; beep(3);
-      exercises[state.exIdx].done = true;
-      saveState();
-    } else {
-      state.phase = "rest"; state.time = ex.rest; beep(1);
-      startInterval();
-    }
-  } else if (state.phase === "rest") {
-    state.set++;
-    state.phase = "work"; state.time = ex.work; beep(0);
-    startInterval();
-  }
+  if (state.phase === "paused") state.phase = state.pausedFrom;
+  state.time = 0;
+  onTimerZero();
   render();
 }
 
@@ -441,6 +643,11 @@ function backToList() {
   releaseWakeLock();
   state.view = "list";
   state.phase = "idle";
+  state.ssGroup = [];
+  state.ssActive = [];
+  state.ssPos = 0;
+  state.ssRound = 1;
+  state.ssSetsLeft = {};
   render();
 }
 
@@ -466,6 +673,7 @@ function saveExercise() {
   const sets = Math.min(20, Math.max(1, parseInt(document.getElementById("add-sets").value) || 5));
   const work = Math.max(1, parseInt(document.getElementById("add-work").value) || 30);
   const rest = Math.max(0, parseInt(document.getElementById("add-rest").value) ?? 0);
+  const linked = document.getElementById("add-linked").checked;
   const data = {
     name,
     weight,
@@ -473,6 +681,7 @@ function saveExercise() {
     reps: parseInt(document.getElementById("add-reps").value) || 10,
     work,
     rest,
+    linkedToNext: linked,
   };
   if (editIdx !== null) {
     // Edit existing — preserve done state
@@ -676,6 +885,7 @@ function openEditModal(i) {
   document.getElementById("add-reps").value = ex.reps;
   document.getElementById("add-work").value = ex.work;
   document.getElementById("add-rest").value = ex.rest;
+  document.getElementById("add-linked").checked = ex.linkedToNext || false;
 }
 
 function closeModal() {
@@ -688,10 +898,16 @@ function closeModal() {
 function renderBorderTimer(phase, time) {
   const ex = exercises[state.exIdx];
   if (!ex) return "";
-  const total = phase === "work" ? ex.work : phase === "rest" ? ex.rest : phase === "countdown" ? 5 : 0;
+  const inSS = state.ssGroup.length > 1;
+  const restTotal = inSS ? ssActiveRest() : ex.rest;
+  const total = phase === "work" ? ex.work : phase === "rest" ? restTotal : (phase === "countdown" || phase === "buffer") ? 5 : 0;
   const pct = total > 0 ? time / total : 0;
-  const colors = { work: "#ff6a4a", rest: "#4ac4c4", done: "#4aff7a", paused: "#ffaa00", countdown: "#ffaa00" };
-  const strokeColor = colors[phase] || "#888";
+  const baseColors = { work: "#ff6a4a", rest: "#4ac4c4", done: "#4aff7a", paused: "#ffaa00", countdown: "#ffaa00", buffer: "#ffaa00" };
+  let strokeColor = baseColors[phase] || "#888";
+  if (phase === "work" && inSS) {
+    const gPos = state.ssGroup.indexOf(state.exIdx);
+    if (gPos >= 0) strokeColor = ssExColor(gPos);
+  }
   // Rectangle perimeter path — inset by half stroke width
   const sw = 14;
   const m = sw / 2;
@@ -723,8 +939,21 @@ function render() {
 
     const renderCard = (e, i) => {
       const globalIdx = exercises.indexOf(e);
-      return `
-        <div class="exercise-card ${e.done ? 'done' : ''} ${e.optional ? 'optional' : ''}"
+      const group = getSupersetGroup(globalIdx);
+      const inSS = group.length > 1;
+      const posInGroup = group.indexOf(globalIdx);
+      let ssCls = "";
+      if (inSS) {
+        if (posInGroup === 0) ssCls = "ss-top";
+        else if (posInGroup === group.length - 1) ssCls = "ss-bot";
+        else ssCls = "ss-mid";
+      }
+      // Show "Superset" label before the first card in a group
+      const ssLabel = inSS && posInGroup === 0 ? `<div class="ss-label">Superset (${group.length} exercises)</div>` : "";
+      // Only show Start on first exercise in superset
+      const showStart = !inSS || posInGroup === 0;
+      return `${ssLabel}
+        <div class="exercise-card ${e.done ? 'done' : ''} ${e.optional ? 'optional' : ''} ${ssCls}"
           data-idx="${globalIdx}"
           ondragover="onDragOver(event,${globalIdx})" ondrop="onDrop(event,${globalIdx})">
           <span class="drag-handle" draggable="true"
@@ -734,10 +963,10 @@ function render() {
             ontouchend="onTouchDragEnd(event)">☰</span>
           <div class="tick-box ${e.done ? 'checked' : ''}" onclick="toggleDone(${globalIdx})">${e.done ? '✓' : ''}</div>
           <div class="exercise-info">
-            <div class="exercise-name">${e.name}${e.optional ? '<span class="optional-tag">pick one</span>' : ''}</div>
-            <div class="exercise-detail">${e.weight} &times; ${e.sets} sets &times; ${e.reps} reps &middot; ${e.work}s work / ${e.rest}s rest &middot; ~${fmtTime(estTime(e))}</div>
+            <div class="exercise-name">${e.name}${e.optional ? '<span class="optional-tag">potential backfill</span>' : ''}</div>
+            <div class="exercise-detail">${e.weight} &times; ${e.sets} sets &times; ${e.reps} reps &middot; ${e.work}s work / ${e.rest}s rest &middot; ${fmtTime(estTime(e))}</div>
           </div>
-          <button class="btn-start" onclick="startExercise(${globalIdx})">${e.done ? 'Redo' : 'Start'}</button>
+          ${showStart ? `<button class="btn-start" onclick="startExercise(${globalIdx})">${e.done ? 'Redo' : 'Start'}</button>` : ''}
           <button class="btn-remove" onclick="openEditModal(${globalIdx})">✎</button>
           <button class="btn-remove" onclick="removeExercise(${globalIdx})">&times;</button>
         </div>
@@ -752,17 +981,12 @@ function render() {
         <div class="header-row">
           <div>
             <h1>Workout Timer</h1>
-            <div class="sub">${doneCount} / ${mainExercises.length} exercises complete</div>
+            <div class="sub">${doneCount} / ${mainExercises.length} exercises complete &middot; ${fmtTime(estWorkoutTime())} remaining</div>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>
 
-        ${mainExercises.map(renderCard).join("")}
-
-        ${optionalExercises.length ? `
-          <div class="section-label">Backfill Options (pick one or skip)</div>
-          ${optionalExercises.map(renderCard).join("")}
-        ` : ""}
+        ${exercises.map(renderCard).join("")}
 
         <button class="btn-open-add" onclick="openAddModal()">＋ Add Exercise</button>
 
@@ -808,6 +1032,12 @@ function render() {
                 <input id="add-rest" type="number" value="0" min="0">
               </div>
             </div>
+            <div class="modal-field" style="margin-top:10px">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#4a6aff">
+                <input id="add-linked" type="checkbox" style="width:20px;height:20px;accent-color:#4a6aff">
+                Superset with next exercise
+              </label>
+            </div>
             <div class="modal-buttons">
               <button class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
               <button class="btn-modal-add" onclick="saveExercise()">${editIdx !== null ? 'Save' : 'Add'}</button>
@@ -826,10 +1056,18 @@ function render() {
 
   } else {
     const ex = exercises[state.exIdx];
-    const colorClass = "color-" + state.phase;
+    const inSS = state.ssGroup.length > 1;
+    const gPos = inSS ? state.ssGroup.indexOf(state.exIdx) : -1;
+    // For work & countdown in supersets, use exercise color; otherwise use default phase color
+    const phaseColors = { work: "#ff6a4a", rest: "#4ac4c4", done: "#4aff7a", paused: "#ffaa00", countdown: "#ffaa00", buffer: "#ffaa00" };
+    let textColor = phaseColors[state.phase] || "#888";
+    if (inSS && state.phase === "work" && gPos >= 0) {
+      textColor = ssExColor(gPos);
+    }
+    const colorStyle = `color:${textColor}`;
     const bgClass = "bg-" + state.phase;
-    const labels = { work: "Work", rest: "Rest", done: "Complete", paused: "Paused", countdown: "Get Ready" };
-    const display = state.phase === "done" ? "✓" : state.phase === "countdown" ? state.time : fmtTime(state.time);
+    const labels = { work: "Work", rest: "Rest", done: "Complete", paused: "Paused", countdown: "Get Ready", buffer: "Next Up" };
+    const display = state.phase === "done" ? "✓" : (state.phase === "countdown" || state.phase === "buffer") ? state.time : fmtTime(state.time);
     const remaining = totalRemaining();
 
     let controls = "";
@@ -843,30 +1081,90 @@ function render() {
       controls = `<button class="btn-pause" onclick="pause()">Pause</button><button class="btn-skip" onclick="skip()">Skip →</button>`;
     }
 
+    const group = state.ssGroup;
+
     let meta = "";
     if (state.phase === "countdown") {
       meta = `<span style="color:#999">Starting in ${state.time}...</span>`;
     } else if (state.phase !== "done") {
-      meta = `<span>Set <span class="set-num">${state.set}</span> / ${ex.sets}</span><span style="color:#444">|</span><span>~${fmtTime(Math.max(0, remaining))} left</span>`;
+      if (inSS) {
+        meta = `<span>Round <span class="set-num">${state.ssRound}</span></span><span style="color:#444">|</span><span>${fmtTime(Math.max(0, remaining))} left</span>`;
+      } else {
+        meta = `<span>Set <span class="set-num">${state.set}</span> / ${ex.sets}</span><span style="color:#444">|</span><span>${fmtTime(Math.max(0, remaining))} left</span>`;
+      }
+    }
+
+    // Superset breadcrumb: coloured per exercise, bright when active, dark when not
+    let ssBreadcrumb = "";
+    if (inSS && state.phase !== "countdown") {
+      const items = state.ssActive.map((idx) => {
+        const gPos = state.ssGroup.indexOf(idx);
+        const exColor = ssExColor(gPos);
+        const isActive = idx === state.exIdx && state.phase === "work";
+        const posInActive = state.ssActive.indexOf(idx);
+        const alreadyWorked = state.phase === "work" && posInActive < state.ssPos;
+        const setsLeft = state.ssSetsLeft[idx] || 0;
+        const total = exercises[idx].sets;
+        let done = total - setsLeft;
+        if (alreadyWorked) done++;
+        const setNum = Math.min(done + 1, total);
+        // Bright color when active, darker (40% opacity) when not
+        const color = isActive ? exColor : exColor + "66";
+        const weight = isActive ? "700" : "400";
+        return `<span style="color:${color};font-weight:${weight}">${exercises[idx].name} <small style="opacity:0.7">${setNum}/${total}</small></span>`;
+      });
+      // Add Rest item
+      const restColor = state.phase === "rest" ? "#4ac4c4" : "#4ac4c466";
+      const restWeight = state.phase === "rest" ? "700" : "400";
+      if (state.phase !== "done") {
+        items.push(`<span style="color:${restColor};font-weight:${restWeight}">Rest</span>`);
+      }
+      // Flat list with arrows between all items; CSS handles wrapping
+      let bcHtml = "";
+      for (let i = 0; i < items.length; i++) {
+        if (i > 0) bcHtml += '<span class="ss-arrow">→</span>';
+        bcHtml += items[i];
+      }
+      ssBreadcrumb = `<div class="ss-breadcrumb">${bcHtml}</div>`;
+    }
+
+    // Progress pills: for solo = sets, for superset = per-exercise set pills
+    let progressHtml = "";
+    if (state.phase !== "countdown") {
+      if (inSS) {
+        // No progress section for supersets — breadcrumbs handle it
+        progressHtml = "";
+      } else {
+        progressHtml = `<div class="timer-progress">${Array.from({length: ex.sets}, (_, i) => {
+          let cls = "";
+          if (state.phase === "done") { cls = "done"; }
+          else if (state.phase === "rest" || state.phase === "paused") {
+            if (i < state.set) { cls = "done"; }
+            else if (i === state.set) { cls = "active-rest"; }
+          } else {
+            if (i < state.set - 1) { cls = "done"; }
+            else if (i === state.set - 1) { cls = "active-" + state.phase; }
+          }
+          return `<div class="set-block ${cls}"></div>`;
+        }).join("")}</div>`;
+      }
     }
 
     app.innerHTML = `
       <div class="timer-view">
         <button class="btn-back" onclick="backToList()">← Back</button>
         <div class="timer-left">
-          <div class="timer-exercise-name">${ex.name}</div>
-          <div class="timer-exercise-detail">${ex.weight} &times; ${ex.reps} reps</div>
+          <div class="timer-exercise-name">${inSS && state.phase === "rest" ? "Rest" : ex.name}</div>
+          <div class="timer-exercise-detail">${inSS && state.phase === "rest" ? "&nbsp;" : ex.weight + " &times; " + ex.reps + " reps"}</div>
           <div class="timer-meta">${meta}</div>
-          ${state.phase !== "countdown" ? `<div class="timer-progress">${Array.from({length: ex.sets}, (_, i) => {
-            const cls = i < state.set - 1 ? "done" : (i === state.set - 1 && state.phase !== "done" ? "active-" + state.phase : (state.phase === "done" ? "done" : ""));
-            return `<div class="set-block ${cls}"></div>`;
-          }).join("")}</div>` : ""}
+          ${progressHtml}
         </div>
         <div class="timer-right">
-          <div class="timer-clock ${colorClass}">${display}</div>
-          <div class="timer-phase ${colorClass}">${labels[state.phase] || ""}</div>
+          <div class="timer-clock" style="${colorStyle}">${display}</div>
+          <div class="timer-phase" style="${colorStyle}">${labels[state.phase] || ""}</div>
           <div class="timer-controls">${controls}</div>
         </div>
+        ${ssBreadcrumb}
       </div>
       ${renderBorderTimer(state.phase, state.time)}
     `;
