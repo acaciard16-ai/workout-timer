@@ -182,7 +182,7 @@ function loadExercises() {
     const raw = window.location.hash.slice(1);
     if (raw) {
       // Convert base64url (RFC 4648) back to standard base64 for atob
-      const encoded = raw.replace(/-/g, "+").replace(/_/g, "/") + "==".slice(0, (3 - raw.length % 3) % 3);
+      const encoded = raw.replace(/-/g, "+").replace(/_/g, "/") + "==".slice(0, (4 - raw.length % 4) % 4);
       const text = atob(encoded);
       let decoded;
       if (text.startsWith("[")) {
