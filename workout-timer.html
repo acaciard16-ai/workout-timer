@@ -166,8 +166,8 @@ let sourceData = EXERCISES_DATA;  // original exercises for this source (for Res
 let saveKey = "wt-embedded";      // localStorage key scoped to source
 
 // ── WORKOUT METADATA ──
-// Parsed from @-prefixed first segment in V2 URLs: @YYYY-MM-DDTHH:MM[,athlete]
-let workoutMeta = { scheduledTime: null, athlete: null };
+// Parsed from @-prefixed first segment in V2 URLs: @ref[,athlete]
+let workoutMeta = { ref: null, athlete: null };
 
 function hashCode(str) {
   let h = 0;
@@ -194,7 +194,7 @@ function loadExercises() {
         // Check for @-prefixed metadata segment
         if (segments.length && segments[0].startsWith("@")) {
           const metaFields = segments.shift().slice(1).split(",");
-          if (metaFields[0]) workoutMeta.scheduledTime = metaFields[0]; // ISO 8601: YYYY-MM-DDTHH:MM
+          if (metaFields[0]) workoutMeta.ref = metaFields[0]; // unique 6-char ref code
           if (metaFields[1]) workoutMeta.athlete = metaFields[1];
         }
         decoded = segments.map(seg => {
@@ -279,7 +279,7 @@ function exportResults() {
   const main = exercises.filter(e => !e.optional);
   const opt = exercises.filter(e => e.optional);
   const header = [];
-  if (workoutMeta.scheduledTime) header.push(`workout:${workoutMeta.scheduledTime}`);
+  if (workoutMeta.ref) header.push(`ref:${workoutMeta.ref}`);
   if (workoutMeta.athlete) header.push(`athlete:${workoutMeta.athlete}`);
   const now = new Date();
   const pad = n => String(n).padStart(2, "0");
@@ -1102,16 +1102,7 @@ function render() {
     let schedLabel = "";
     const metaParts = [];
     if (workoutMeta.athlete) metaParts.push(workoutMeta.athlete);
-    if (workoutMeta.scheduledTime) {
-      try {
-        const d = new Date(workoutMeta.scheduledTime);
-        if (!isNaN(d)) {
-          const day = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-          const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-          metaParts.push(`${day} ${time}`);
-        }
-      } catch (e) {}
-    }
+    if (workoutMeta.ref) metaParts.push(`ref:${workoutMeta.ref}`);
     if (metaParts.length) schedLabel = metaParts.join(" \u00b7 ");
 
     app.innerHTML = `
