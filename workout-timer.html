@@ -148,9 +148,99 @@
     .list-view { padding: 16px; }
     .exercise-card { padding: 12px 14px; gap: 10px; }
   }
+
+  /* HELP SECTION */
+  .help-section { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; margin-bottom: 20px; overflow: hidden; }
+  .help-toggle { width: 100%; background: none; border: none; color: #555; padding: 12px 20px; cursor: pointer; font-size: clamp(12px, 1.3vw, 18px); font-weight: 600; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+  .help-toggle:hover { color: #888; }
+  .help-toggle .arrow { transition: transform 0.3s; }
+  .help-toggle.open .arrow { transform: rotate(180deg); }
+  .help-body { max-height: 0; overflow: hidden; padding: 0 20px; transition: max-height 0.4s ease, padding 0.3s ease; }
+  .help-body.open { max-height: 3000px; padding: 0 20px 20px; }
+  .help-body h3 { font-size: clamp(13px, 1.4vw, 20px); color: #ccc; font-weight: 700; margin: 14px 0 6px; }
+  .help-body h3:first-child { margin-top: 0; }
+  .help-body p { font-size: clamp(12px, 1.3vw, 17px); color: #777; line-height: 1.6; margin-bottom: 8px; }
+  .help-body code { background: #1a1a1a; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 0.9em; color: #aaa; }
+  .help-body pre { background: #111; border: 1px solid #222; border-radius: 8px; padding: 12px 16px; overflow-x: auto; margin: 8px 0 12px; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: clamp(11px, 1.1vw, 15px); color: #aaa; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+  .help-body .note { background: #1a1a0d; border-left: 3px solid #aa9944; padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+  .help-body .note p { color: #aa9944; margin: 0; }
+  .help-body table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; }
+  .help-body th, .help-body td { text-align: left; padding: 6px 10px; font-size: clamp(11px, 1.2vw, 16px); border-bottom: 1px solid #1a1a1a; }
+  .help-body th { color: #888; font-weight: 600; }
+  .help-body td { color: #666; }
+  .help-body td code { font-size: 0.85em; }
 </style>
 </head>
 <body>
+
+<!--
+  ============================================================
+  FORMAT SPECIFICATION (V2 Compact String)
+  ============================================================
+  This section is intentionally included in the HTML source so
+  that any LLM or tool reading this page can understand how to
+  programmatically generate valid timer URLs.
+
+  TIMER URL STRUCTURE:
+    https://acaciard16-ai.github.io/workout-timer/workout-timer.html#<hash>
+
+  The <hash> portion can be encoded two ways:
+    1. Plaintext: percent-encode the V2 string and append as-is
+       e.g. #%40abc123%3BSwing%2C20kg%2C4%2C10%2C30%2C60
+    2. Base64url: base64-encode the V2 string, then replace
+       +→- /→_ and strip trailing = padding
+
+  V2 COMPACT STRING FORMAT:
+    @<ref>[,<athlete>];<exercise1>;<exercise2>;...
+
+  METADATA SEGMENT (first segment, starts with @):
+    @<ref>         — 6-char hex fingerprint (any 6 hex chars)
+    @<ref>,<name>  — with optional athlete name
+
+  EXERCISE SEGMENT (semicolon-delimited):
+    <name>,<weight>,<sets>,<reps>,<work_secs>,<rest_secs>[,<flags>]
+
+  FIELDS:
+    name      — free text exercise name (no commas)
+    weight    — e.g. "20kg", "BW", "16lbs"
+    sets      — integer, number of sets
+    reps      — integer, reps per set
+    work_secs — integer, seconds of work per set
+    rest_secs — integer, seconds of rest between sets
+    flags     — optional: "s" = superset (linked to next exercise),
+                "o" = optional exercise, combine as "so"
+
+  SUPERSET LINKING:
+    Set the "s" flag on every exercise in the superset EXCEPT
+    the last one. The timer groups consecutive s-flagged exercises
+    with the next non-flagged exercise into a superset block.
+
+  EXAMPLE (3 exercises, last two are a superset):
+    @a1b2c3,Justin;Kettlebell Swing,20kg,4,10,30,60;Bicep Curl,12kg,3,10,25,60,s;Tricep Ext,12kg,3,10,25,60
+
+  PLAINTEXT URL (percent-encoded):
+    ...workout-timer.html#%40a1b2c3%2CJustin%3BKettlebell%20Swing%2C20kg%2C4%2C10%2C30%2C60%3BBicep%20Curl%2C12kg%2C3%2C10%2C25%2C60%2Cs%3BTricep%20Ext%2C12kg%2C3%2C10%2C25%2C60
+
+  WORK/REST DEFAULTS:
+    If creating exercises without specific timing, these are
+    reasonable defaults based on exercise type:
+      Compound lifts:  work=30, rest=90
+      Isolation:       work=25, rest=60
+      Carries/planks:  work=45, rest=60
+      Swings/ballistic: work=30, rest=60
+      Bodyweight:      work=30, rest=60
+
+  iOS CALENDAR LIMIT:
+    Total URL must be ≤350 characters for iOS Calendar to render
+    it as a clickable link. Base64url is ~20-25 chars shorter than
+    plaintext for a typical 5-exercise workout. 6+ exercises may
+    exceed the limit with plaintext encoding.
+
+  WORKOUT BUILDER:
+    A visual UI for creating timer URLs is available at:
+    https://acaciard16-ai.github.io/workout-timer/workout-builder.html
+  ============================================================
+-->
 
 <div id="app"></div>
 
@@ -987,6 +1077,7 @@ document.addEventListener('visibilitychange', () => {
 // ── ADD/EDIT EXERCISE MODAL ──
 let modalOpen = false;
 let editIdx = null;  // null = adding, number = editing that index
+let timerHelpOpen = false;
 
 function openAddModal() {
   editIdx = null;
@@ -1130,6 +1221,7 @@ function render() {
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <a href="#" onclick="timerHelpOpen=!timerHelpOpen;render();return false" style="font-size:clamp(11px,1.2vw,18px);color:#4a6aff;text-decoration:none;font-weight:600;white-space:nowrap">Help</a>
             <a href="workout-builder.html" style="font-size:clamp(11px,1.2vw,18px);color:#4a6aff;text-decoration:none;font-weight:600;white-space:nowrap">Builder</a>
           </div>
         </div>
@@ -1203,6 +1295,65 @@ function render() {
           <button id="export-btn" onclick="exportResults()">Export</button>
           <button onclick="sendToShortcut()">Send Timer Info On</button>
           <button onclick="clearSavedState()">Reset All</button>
+        </div>
+
+        <div class="help-section">
+          <button class="help-toggle ${timerHelpOpen ? 'open' : ''}" onclick="timerHelpOpen=!timerHelpOpen;render()">
+            <span>URL format — for humans, LLMs, and tools</span>
+            <span class="arrow">▾</span>
+          </button>
+          <div class="help-body ${timerHelpOpen ? 'open' : ''}">
+            <h3>How the timer URL works</h3>
+            <p>Exercises are encoded in the <code>#</code> fragment of this page's URL. No server, no account — the URL <em>is</em> the workout. Share it, bookmark it, or generate it programmatically.</p>
+
+            <h3>V2 compact string format</h3>
+            <pre>@&lt;ref&gt;[,&lt;athlete&gt;];&lt;exercise1&gt;;&lt;exercise2&gt;;...</pre>
+            <p>Each exercise segment is comma-delimited:</p>
+            <pre>&lt;name&gt;,&lt;weight&gt;,&lt;sets&gt;,&lt;reps&gt;,&lt;work_secs&gt;,&lt;rest_secs&gt;[,&lt;flags&gt;]</pre>
+
+            <h3>Fields</h3>
+            <table>
+              <tr><th>Field</th><th>Type</th><th>Example</th><th>Notes</th></tr>
+              <tr><td><code>ref</code></td><td>string</td><td><code>a1b2c3</code></td><td>6-char hex ID — any value works</td></tr>
+              <tr><td><code>athlete</code></td><td>string</td><td><code>Justin</code></td><td>Optional, after ref with comma</td></tr>
+              <tr><td><code>name</code></td><td>string</td><td><code>Kettlebell Swing</code></td><td>No commas in name</td></tr>
+              <tr><td><code>weight</code></td><td>string</td><td><code>20kg</code>, <code>BW</code></td><td>Number + unit, or BW</td></tr>
+              <tr><td><code>sets</code></td><td>int</td><td><code>4</code></td><td>Number of sets</td></tr>
+              <tr><td><code>reps</code></td><td>int</td><td><code>10</code></td><td>Reps per set</td></tr>
+              <tr><td><code>work</code></td><td>int</td><td><code>30</code></td><td>Seconds of work per set</td></tr>
+              <tr><td><code>rest</code></td><td>int</td><td><code>60</code></td><td>Seconds of rest between sets</td></tr>
+              <tr><td><code>flags</code></td><td>string</td><td><code>s</code>, <code>o</code>, <code>so</code></td><td>s = superset, o = optional</td></tr>
+            </table>
+
+            <h3>Supersets</h3>
+            <p>Add the <code>s</code> flag to every exercise in the group <strong>except the last</strong>. The timer alternates sets across linked exercises.</p>
+            <pre>Bicep Curl,12kg,3,10,25,60,s;Tricep Ext,12kg,3,10,25,60</pre>
+
+            <h3>URL encoding (two options)</h3>
+            <p><strong>Plaintext</strong> — percent-encode the V2 string with <code>encodeURIComponent()</code> and append after <code>#</code>. Easy for any tool to produce.</p>
+            <p><strong>Base64url</strong> — base64-encode the V2 string, replace <code>+</code> with <code>-</code>, <code>/</code> with <code>_</code>, strip trailing <code>=</code>. ~20-25 chars shorter.</p>
+
+            <div class="note"><p>iOS Calendar makes URLs clickable only up to ~350 characters.</p></div>
+
+            <h3>Full example</h3>
+            <p>V2 string for 2 exercises:</p>
+            <pre>@a1b2c3,Justin;Kettlebell Swing,20kg,4,10,30,60;Push-Ups,BW,3,15,30,60</pre>
+            <p>As a plaintext URL:</p>
+            <pre>workout-timer.html#%40a1b2c3%2CJustin%3BKettlebell%20Swing%2C20kg%2C4%2C10%2C30%2C60%3BPush-Ups%2CBW%2C3%2C15%2C30%2C60</pre>
+
+            <h3>Work/rest defaults</h3>
+            <table>
+              <tr><th>Exercise type</th><th>Work (sec)</th><th>Rest (sec)</th></tr>
+              <tr><td>Compound lifts (squat, deadlift)</td><td>30</td><td>90</td></tr>
+              <tr><td>Isolation (curls, extensions)</td><td>25</td><td>60</td></tr>
+              <tr><td>Carries / planks / holds</td><td>45</td><td>60</td></tr>
+              <tr><td>Swings / ballistic</td><td>30</td><td>60</td></tr>
+              <tr><td>Bodyweight</td><td>30</td><td>60</td></tr>
+            </table>
+
+            <h3>For LLMs and tools</h3>
+            <p>To generate a timer URL programmatically: build the V2 string per the spec above, percent-encode it, and prepend <code>https://acaciard16-ai.github.io/workout-timer/workout-timer.html#</code>. This page parses either encoding automatically. A visual builder is also available at <a href="workout-builder.html" style="color:#4a6aff">workout-builder.html</a>.</p>
+          </div>
         </div>
       </div>
     `;
