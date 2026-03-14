@@ -173,12 +173,28 @@ function hashCode(str) {
 
 function loadExercises() {
   let data = EXERCISES_DATA;
-  // Check ?w= query param first (clickable in calendar links), then #hash fallback
+  // Load from URL hash fragment (no '=' chars — safe for iOS link detection)
   try {
-    const params = new URLSearchParams(window.location.search);
-    const encoded = params.get("w") || window.location.hash.slice(1);
-    if (encoded) {
-      const decoded = JSON.parse(atob(encoded));
+    const raw = window.location.hash.slice(1);
+    if (raw) {
+      // Convert base64url (RFC 4648) back to standard base64 for atob
+      const encoded = raw.replace(/-/g, "+").replace(/_/g, "/") + "==".slice(0, (3 - raw.length % 3) % 3);
+      const text = atob(encoded);
+      let decoded;
+      if (text.startsWith("[")) {
+        // V1: JSON array format
+        decoded = JSON.parse(text);
+      } else {
+        // V2: compact format — name,weight,sets,reps,work,rest[,flags];...
+        decoded = text.split(";").filter(Boolean).map(seg => {
+          const f = seg.split(",");
+          const ex = { name: f[0], weight: f[1], sets: +f[2], reps: +f[3], work: +f[4], rest: +f[5] };
+          const flags = f[6] || "";
+          if (flags.includes("o")) ex.optional = true;
+          if (flags.includes("s")) ex.linkedToNext = true;
+          return ex;
+        });
+      }
       if (Array.isArray(decoded) && decoded.length) {
         data = decoded;
         saveKey = "wt-" + hashCode(encoded);
