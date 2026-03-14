@@ -165,6 +165,10 @@ const EXERCISES_DATA = [];
 let sourceData = EXERCISES_DATA;  // original exercises for this source (for Reset All)
 let saveKey = "wt-embedded";      // localStorage key scoped to source
 
+// ── WORKOUT METADATA ──
+// Parsed from @-prefixed first segment in V2 URLs: @YYYY-MM-DDTHH:MM[,field,...]
+let workoutMeta = { scheduledTime: null };
+
 function hashCode(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
@@ -185,8 +189,14 @@ function loadExercises() {
         // V1: JSON array format
         decoded = JSON.parse(text);
       } else {
-        // V2: compact format — name,weight,sets,reps,work,rest[,flags];...
-        decoded = text.split(";").filter(Boolean).map(seg => {
+        // V2: compact format — [@metadata;]name,weight,sets,reps,work,rest[,flags];...
+        const segments = text.split(";").filter(Boolean);
+        // Check for @-prefixed metadata segment
+        if (segments.length && segments[0].startsWith("@")) {
+          const metaFields = segments.shift().slice(1).split(",");
+          if (metaFields[0]) workoutMeta.scheduledTime = metaFields[0]; // ISO 8601: YYYY-MM-DDTHH:MM
+        }
+        decoded = segments.map(seg => {
           const f = seg.split(",");
           const ex = { name: f[0], weight: f[1], sets: +f[2], reps: +f[3], work: +f[4], rest: +f[5] };
           const flags = f[6] || "";
@@ -263,7 +273,12 @@ function clearSavedState() {
 function exportResults() {
   const main = exercises.filter(e => !e.optional);
   const opt = exercises.filter(e => e.optional);
-  const lines = [];
+  const header = [];
+  if (workoutMeta.scheduledTime) header.push(`workout:${workoutMeta.scheduledTime}`);
+  const now = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  header.push(`completed:${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`);
+  const lines = [...header];
   main.forEach(e => {
     const mark = e.done ? "✅" : "⏭️";
     lines.push(`${mark} ${e.name} | ${e.weight} × ${e.sets} × ${e.reps} | ${e.work}s+${e.rest}s`);
@@ -1077,11 +1092,25 @@ function render() {
     const savedAt = localStorage.getItem(saveKey) ? JSON.parse(localStorage.getItem(saveKey)).savedAt : null;
     const savedLabel = savedAt ? "Saved " + new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Not saved yet";
 
+    // Format scheduled time for display
+    let schedLabel = "";
+    if (workoutMeta.scheduledTime) {
+      try {
+        const d = new Date(workoutMeta.scheduledTime);
+        if (!isNaN(d)) {
+          const day = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+          const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          schedLabel = `${day} ${time}`;
+        }
+      } catch (e) {}
+    }
+
     app.innerHTML = `
       <div class="list-view">
         <div class="header-row">
           <div>
             <h1>Workout Timer</h1>
+            ${schedLabel ? `<div class="sub" style="margin-bottom:2px">${schedLabel}</div>` : ""}
             <div class="sub">${doneCount} / ${mainExercises.length} exercises complete &middot; ${fmtTime(estWorkoutTime())} remaining</div>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
