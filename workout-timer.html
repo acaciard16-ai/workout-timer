@@ -1128,7 +1128,10 @@ function render() {
             ${schedLabel ? `<div class="sub" style="margin-bottom:2px">${schedLabel}</div>` : ""}
             <div class="sub">${doneCount} / ${mainExercises.length} exercises complete &middot; ${fmtTime(estWorkoutTime())} remaining</div>
           </div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <a href="workout-builder.html" style="font-size:clamp(11px,1.2vw,18px);color:#4a6aff;text-decoration:none;font-weight:600;white-space:nowrap">Builder</a>
+          </div>
         </div>
 
         ${exercises.map(renderCard).join("")}

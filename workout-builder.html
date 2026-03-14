@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Workout Builder</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000; color: #e0e0e0; min-height: 100vh; overflow-x: hidden; }
+
+  .container { padding: 28px; max-width: 700px; margin: 0 auto; }
+  h1 { font-size: clamp(22px, 2.5vw, 42px); font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .sub { font-size: clamp(13px, 1.5vw, 24px); color: #555; margin-bottom: 24px; }
+
+  /* SETTINGS ROW */
+  .settings { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+  .settings .field { flex: 1; min-width: 140px; }
+  .settings label { display: block; font-size: clamp(11px, 1.2vw, 18px); color: #666; margin-bottom: 4px; font-weight: 600; }
+  .settings input { width: 100%; background: #111; border: 1px solid #333; border-radius: 10px; padding: 10px 14px; color: #fff; font-size: clamp(14px, 1.5vw, 22px); }
+
+  /* EXERCISE LIST */
+  .exercise-list { margin-bottom: 16px; }
+
+  .ex-card { background: #1a1a1a; border-radius: 14px; padding: 16px 20px; border: 1px solid #2a2a2a; margin-bottom: 10px; position: relative; }
+  .ex-card.ss-top { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0; border-bottom: 1px dashed #4a6aff; border-color: #3a4a6a; }
+  .ex-card.ss-mid { border-radius: 0; margin-bottom: 0; border-bottom: 1px dashed #4a6aff; border-top: none; border-color: #3a4a6a; }
+  .ex-card.ss-bot { border-top-left-radius: 0; border-top-right-radius: 0; border-top: none; border-color: #3a4a6a; }
+  .ss-label { font-size: clamp(9px, 1vw, 14px); color: #4a6aff; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+
+  .ex-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .ex-name { font-weight: 700; font-size: clamp(15px, 1.7vw, 26px); color: #fff; flex: 1; }
+  .ex-detail { font-size: clamp(12px, 1.3vw, 20px); color: #888; }
+  .ex-actions { display: flex; gap: 6px; }
+  .ex-actions button { background: none; border: none; color: #444; cursor: pointer; font-size: clamp(16px, 1.8vw, 28px); padding: 4px 6px; }
+  .ex-actions button:hover { color: #888; }
+
+  .btn-add { background: #1a1a1a; color: #888; border: 1px solid #2a2a2a; border-radius: 14px; padding: 16px; cursor: pointer; font-size: clamp(14px, 1.6vw, 26px); font-weight: 600; width: 100%; margin-bottom: 24px; text-align: center; }
+  .btn-add:hover { background: #222; color: #ccc; }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.hidden { display: none; }
+  .modal { background: #1a1a1a; border-radius: 20px; padding: clamp(20px, 3vw, 36px); border: 1px solid #333; width: 100%; max-width: 480px; }
+  .modal h3 { font-size: clamp(18px, 2vw, 30px); color: #fff; font-weight: 700; margin-bottom: 20px; }
+  .modal-field { margin-bottom: 14px; }
+  .modal-field label { display: block; font-size: clamp(12px, 1.3vw, 18px); color: #888; margin-bottom: 6px; font-weight: 600; }
+  .modal-field input, .modal-field select { width: 100%; background: #111; border: 1px solid #333; border-radius: 10px; padding: 12px 16px; color: #fff; font-size: clamp(14px, 1.5vw, 22px); }
+  .modal-field select { appearance: none; -webkit-appearance: none; }
+  .modal-row { display: flex; gap: 10px; }
+  .modal-row .modal-field { flex: 1; }
+  .weight-group { display: flex; gap: 8px; }
+  .weight-group .modal-field:first-child { flex: 1; }
+  .weight-group .modal-field:last-child { flex: 0 0 auto; min-width: 80px; }
+  .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-buttons button { flex: 1; border: none; border-radius: 12px; padding: 14px; cursor: pointer; font-size: clamp(14px, 1.5vw, 22px); font-weight: 700; }
+  .btn-modal-save { background: #4a6aff; color: #fff; }
+  .btn-modal-cancel { background: #333; color: #ccc; }
+
+  /* Superset toggle in modal */
+  .toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  .toggle-row label { margin: 0; font-size: clamp(12px, 1.3vw, 18px); color: #888; font-weight: 600; }
+  .toggle-switch { position: relative; width: 44px; height: 24px; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #333; border-radius: 12px; transition: 0.3s; }
+  .toggle-slider:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #888; border-radius: 50%; transition: 0.3s; }
+  .toggle-switch input:checked + .toggle-slider { background: #4a6aff; }
+  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); background: #fff; }
+
+  /* OUTPUT SECTION */
+  .output-section { background: #111; border: 1px solid #222; border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .output-section h2 { font-size: clamp(16px, 1.8vw, 28px); color: #fff; font-weight: 700; margin-bottom: 12px; }
+  .url-box { background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; word-break: break-all; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: clamp(11px, 1.2vw, 16px); color: #aaa; min-height: 40px; max-height: 120px; overflow-y: auto; }
+  .url-label { font-size: clamp(11px, 1.1vw, 16px); color: #555; margin-bottom: 4px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .url-label .char-count { color: #444; font-weight: 400; }
+  .url-label .char-count.warn { color: #ff6a4a; }
+
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn-row button { flex: 1; min-width: 120px; border: none; border-radius: 12px; padding: 14px 20px; cursor: pointer; font-size: clamp(14px, 1.5vw, 22px); font-weight: 700; }
+  .btn-open { background: #4a6aff; color: #fff; }
+  .btn-copy { background: #333; color: #ccc; }
+  .btn-copy.copied { background: #2a4a2a; color: #4aff7a; }
+
+  .est-time { font-size: clamp(13px, 1.4vw, 20px); color: #555; margin-top: 8px; text-align: right; }
+
+  /* EMPTY STATE */
+  .empty-state { text-align: center; padding: 40px 20px; color: #444; font-size: clamp(14px, 1.5vw, 22px); }
+
+  /* PRESETS */
+  .presets { margin-bottom: 24px; }
+  .presets label { display: block; font-size: clamp(11px, 1.2vw, 18px); color: #666; margin-bottom: 8px; font-weight: 600; }
+  .preset-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .preset-chip { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 8px 14px; cursor: pointer; font-size: clamp(12px, 1.3vw, 18px); color: #888; font-weight: 600; }
+  .preset-chip:hover { background: #222; color: #ccc; border-color: #444; }
+
+  .toast { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 12px 24px; border-radius: 12px; font-size: 14px; font-weight: 600; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  /* HEADER ROW */
+  .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+  .header-left { flex: 1; }
+  .header-links { display: flex; gap: 12px; align-items: center; flex-shrink: 0; padding-top: 4px; }
+  .header-links a { font-size: clamp(12px, 1.3vw, 18px); color: #4a6aff; text-decoration: none; font-weight: 600; }
+  .header-links a:hover { color: #6a8aff; }
+
+  /* HELP SECTION */
+  .help-section { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; margin-bottom: 24px; overflow: hidden; }
+  .help-toggle { width: 100%; background: none; border: none; color: #666; padding: 14px 20px; cursor: pointer; font-size: clamp(13px, 1.4vw, 20px); font-weight: 600; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+  .help-toggle:hover { color: #888; }
+  .help-toggle .arrow { transition: transform 0.3s; }
+  .help-toggle.open .arrow { transform: rotate(180deg); }
+  .help-body { display: none; padding: 0 20px 20px; }
+  .help-body.open { display: block; }
+  .help-body h3 { font-size: clamp(14px, 1.5vw, 22px); color: #ccc; font-weight: 700; margin: 16px 0 8px; }
+  .help-body h3:first-child { margin-top: 0; }
+  .help-body p { font-size: clamp(12px, 1.3vw, 18px); color: #777; line-height: 1.6; margin-bottom: 8px; }
+  .help-body code { background: #1a1a1a; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 0.9em; color: #aaa; }
+  .help-body pre { background: #111; border: 1px solid #222; border-radius: 8px; padding: 12px 16px; overflow-x: auto; margin: 8px 0 12px; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: clamp(11px, 1.1vw, 15px); color: #aaa; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+  .help-body .note { background: #1a1a0d; border-left: 3px solid #aa9944; padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+  .help-body .note p { color: #aa9944; margin: 0; }
+  .help-body table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; }
+  .help-body th, .help-body td { text-align: left; padding: 6px 10px; font-size: clamp(11px, 1.2vw, 16px); border-bottom: 1px solid #1a1a1a; }
+  .help-body th { color: #888; font-weight: 600; }
+  .help-body td { color: #666; }
+  .help-body td code { font-size: 0.85em; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header-row">
+    <div class="header-left">
+      <h1>Workout Builder</h1>
+      <p class="sub">Create a workout and open it in the timer</p>
+    </div>
+    <div class="header-links">
+      <a href="#" onclick="toggleHelp(); return false;">Help</a>
+      <a href="workout-timer.html">Timer</a>
+    </div>
+  </div>
+
+  <!--
+    ============================================================
+    FORMAT SPECIFICATION (V2 Compact String)
+    ============================================================
+    This section is intentionally included in the HTML source so
+    that any LLM or tool reading this page can understand how to
+    programmatically generate valid timer URLs.
+
+    TIMER URL STRUCTURE:
+      https://acaciard16-ai.github.io/workout-timer/workout-timer.html#<hash>
+
+    The <hash> portion can be encoded two ways:
+      1. Plaintext: percent-encode the V2 string and append as-is
+         e.g. #%40abc123%3BSwing%2C20kg%2C4%2C10%2C30%2C60
+      2. Base64url: base64-encode the V2 string, then replace
+         +→- /→_ and strip trailing = padding
+
+    V2 COMPACT STRING FORMAT:
+      @<ref>[,<athlete>];<exercise1>;<exercise2>;...
+
+    METADATA SEGMENT (first segment, starts with @):
+      @<ref>         — 6-char hex fingerprint (any 6 hex chars)
+      @<ref>,<name>  — with optional athlete name
+
+    EXERCISE SEGMENT (semicolon-delimited):
+      <name>,<weight>,<sets>,<reps>,<work_secs>,<rest_secs>[,<flags>]
+
+    FIELDS:
+      name      — free text exercise name (no commas)
+      weight    — e.g. "20kg", "BW", "16lbs"
+      sets      — integer, number of sets
+      reps      — integer, reps per set
+      work_secs — integer, seconds of work per set
+      rest_secs — integer, seconds of rest between sets
+      flags     — optional: "s" = superset (linked to next exercise),
+                  "o" = optional exercise, combine as "so"
+
+    SUPERSET LINKING:
+      Set the "s" flag on every exercise in the superset EXCEPT
+      the last one. The timer groups consecutive s-flagged exercises
+      with the next non-flagged exercise into a superset block.
+
+    EXAMPLE (3 exercises, last two are a superset):
+      @a1b2c3,Justin;Kettlebell Swing,20kg,4,10,30,60;Bicep Curl,12kg,3,10,25,60,s;Tricep Ext,12kg,3,10,25,60
+
+    PLAINTEXT URL (percent-encoded):
+      ...workout-timer.html#%40a1b2c3%2CJustin%3BKettlebell%20Swing%2C20kg%2C4%2C10%2C30%2C60%3BBicep%20Curl%2C12kg%2C3%2C10%2C25%2C60%2Cs%3BTricep%20Ext%2C12kg%2C3%2C10%2C25%2C60
+
+    WORK/REST DEFAULTS:
+      If creating exercises without specific timing, these are
+      reasonable defaults based on exercise type:
+        Compound lifts:  work=30, rest=90
+        Isolation:       work=25, rest=60
+        Carries/planks:  work=45, rest=60
+        Swings/ballistic: work=30, rest=60
+        Bodyweight:      work=30, rest=60
+
+    iOS CALENDAR LIMIT:
+      Total URL must be ≤350 characters for iOS Calendar to render
+      it as a clickable link. Base64url is ~20-25 chars shorter than
+      plaintext for a typical 5-exercise workout. 6+ exercises may
+      exceed the limit with plaintext encoding.
+    ============================================================
+  -->
+
+  <div class="help-section" id="helpSection">
+    <button class="help-toggle" id="helpToggle" onclick="toggleHelp()">
+      <span>How it works — format spec for humans and machines</span>
+      <span class="arrow">▾</span>
+    </button>
+    <div class="help-body" id="helpBody">
+      <h3>What this page does</h3>
+      <p>Build a list of exercises, and this page generates a URL that opens the <a href="workout-timer.html" style="color:#4a6aff">Workout Timer</a> with those exercises pre-loaded. No account needed, no server — everything is encoded in the URL itself.</p>
+
+      <h3>URL format (V2 compact string)</h3>
+      <p>The timer reads exercise data from the <code>#</code> fragment of the URL. The data is a semicolon-delimited string:</p>
+      <pre>@&lt;ref&gt;[,&lt;athlete&gt;];&lt;exercise1&gt;;&lt;exercise2&gt;;...</pre>
+      <p>Each exercise segment is comma-delimited:</p>
+      <pre>&lt;name&gt;,&lt;weight&gt;,&lt;sets&gt;,&lt;reps&gt;,&lt;work_secs&gt;,&lt;rest_secs&gt;[,&lt;flags&gt;]</pre>
+
+      <h3>Fields</h3>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Example</th><th>Notes</th></tr>
+        <tr><td><code>ref</code></td><td>string</td><td><code>a1b2c3</code></td><td>6-char hex ID — any value works</td></tr>
+        <tr><td><code>athlete</code></td><td>string</td><td><code>Justin</code></td><td>Optional, after ref with comma</td></tr>
+        <tr><td><code>name</code></td><td>string</td><td><code>Kettlebell Swing</code></td><td>No commas in name</td></tr>
+        <tr><td><code>weight</code></td><td>string</td><td><code>20kg</code>, <code>BW</code></td><td>Number + unit, or BW</td></tr>
+        <tr><td><code>sets</code></td><td>int</td><td><code>4</code></td><td>Number of sets</td></tr>
+        <tr><td><code>reps</code></td><td>int</td><td><code>10</code></td><td>Reps per set</td></tr>
+        <tr><td><code>work</code></td><td>int</td><td><code>30</code></td><td>Seconds of work per set</td></tr>
+        <tr><td><code>rest</code></td><td>int</td><td><code>60</code></td><td>Seconds of rest between sets</td></tr>
+        <tr><td><code>flags</code></td><td>string</td><td><code>s</code>, <code>o</code>, <code>so</code></td><td>s = superset, o = optional</td></tr>
+      </table>
+
+      <h3>Supersets</h3>
+      <p>To link exercises into a superset, add the <code>s</code> flag to every exercise in the group <strong>except the last one</strong>. The timer alternates sets across the linked exercises.</p>
+      <pre>Bicep Curl,12kg,3,10,25,60,s;Tricep Ext,12kg,3,10,25,60</pre>
+
+      <h3>URL encoding</h3>
+      <p>The timer accepts two encodings — use whichever is easier:</p>
+      <p><strong>Plaintext</strong> — percent-encode the V2 string with <code>encodeURIComponent()</code> and append after <code>#</code>. Longer but human-readable and easy for any tool to produce.</p>
+      <p><strong>Base64url</strong> — base64-encode the V2 string, then replace <code>+</code> with <code>-</code>, <code>/</code> with <code>_</code>, and strip trailing <code>=</code>. Shorter by ~20-25 chars.</p>
+
+      <div class="note"><p>iOS Calendar makes URLs clickable only up to ~350 characters. The char counts below each URL show whether you're within that limit.</p></div>
+
+      <h3>Full example</h3>
+      <p>A 2-exercise workout for "Justin":</p>
+      <pre>@a1b2c3,Justin;Kettlebell Swing,20kg,4,10,30,60;Push-Ups,BW,3,15,30,60</pre>
+      <p>As a plaintext URL:</p>
+      <pre>workout-timer.html#%40a1b2c3%2CJustin%3BKettlebell%20Swing%2C20kg%2C4%2C10%2C30%2C60%3BPush-Ups%2CBW%2C3%2C15%2C30%2C60</pre>
+
+      <h3>Work/rest defaults</h3>
+      <p>If you're unsure about timing, use these as starting points:</p>
+      <table>
+        <tr><th>Exercise type</th><th>Work (sec)</th><th>Rest (sec)</th></tr>
+        <tr><td>Compound lifts (squat, deadlift)</td><td>30</td><td>90</td></tr>
+        <tr><td>Isolation (curls, extensions)</td><td>25</td><td>60</td></tr>
+        <tr><td>Carries / planks / holds</td><td>45</td><td>60</td></tr>
+        <tr><td>Swings / ballistic</td><td>30</td><td>60</td></tr>
+        <tr><td>Bodyweight</td><td>30</td><td>60</td></tr>
+      </table>
+
+      <h3>For LLMs and tools</h3>
+      <p>To programmatically generate a timer URL: build the V2 string per the spec above, percent-encode it, and prepend the timer base URL. The full source of this page (including an HTML comment block above this help section) contains the complete specification. The timer HTML at <code>workout-timer.html</code> will parse either encoding automatically.</p>
+    </div>
+  </div>
+
+  <div class="settings">
+    <div class="field">
+      <label>Athlete Name (optional)</label>
+      <input type="text" id="athleteName" placeholder="e.g. Justin">
+    </div>
+  </div>
+
+  <div class="presets">
+    <label>Quick start</label>
+    <div class="preset-chips">
+      <div class="preset-chip" onclick="loadPreset('emom')">EMOM 10×10</div>
+      <div class="preset-chip" onclick="loadPreset('circuit')">3-Exercise Circuit</div>
+      <div class="preset-chip" onclick="loadPreset('superset')">Superset Pair</div>
+      <div class="preset-chip" onclick="loadPreset('clear')">Clear All</div>
+    </div>
+  </div>
+
+  <div class="exercise-list" id="exerciseList"></div>
+
+  <button class="btn-add" onclick="openModal()">+ Add Exercise</button>
+
+  <div class="output-section" id="outputSection">
+    <h2>Timer URL</h2>
+    <div>
+      <div class="url-label">Compact (base64url) <span class="char-count" id="b64Count"></span></div>
+      <div class="url-box" id="urlB64">Add exercises to generate URL</div>
+    </div>
+    <div style="margin-top: 12px;">
+      <div class="url-label">Plaintext <span class="char-count" id="plainCount"></span></div>
+      <div class="url-box" id="urlPlain"></div>
+    </div>
+    <div class="est-time" id="estTime"></div>
+    <div class="btn-row" style="margin-top: 16px;">
+      <button class="btn-open" onclick="openTimer('b64')">Open in Timer</button>
+      <button class="btn-copy" id="btnCopyB64" onclick="copyUrl('b64')">Copy Compact</button>
+      <button class="btn-copy" id="btnCopyPlain" onclick="copyUrl('plain')">Copy Plaintext</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay hidden" id="modalOverlay" onclick="event.target===this && closeModal()">
+  <div class="modal">
+    <h3 id="modalTitle">Add Exercise</h3>
+    <div class="modal-field">
+      <label>Exercise Name</label>
+      <input type="text" id="mName" placeholder="e.g. Kettlebell Swing">
+    </div>
+    <div class="weight-group">
+      <div class="modal-field">
+        <label>Weight</label>
+        <input type="text" id="mWeight" placeholder="e.g. 20">
+      </div>
+      <div class="modal-field">
+        <label>Unit</label>
+        <select id="mUnit">
+          <option value="kg">kg</option>
+          <option value="lbs">lbs</option>
+          <option value="BW">BW</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>Sets</label>
+        <input type="number" id="mSets" placeholder="4" min="1">
+      </div>
+      <div class="modal-field">
+        <label>Reps</label>
+        <input type="number" id="mReps" placeholder="10" min="1">
+      </div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>Work (sec)</label>
+        <input type="number" id="mWork" placeholder="30" min="1">
+      </div>
+      <div class="modal-field">
+        <label>Rest (sec)</label>
+        <input type="number" id="mRest" placeholder="60" min="0">
+      </div>
+    </div>
+    <div class="modal-field">
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="mSuperset">
+          <span class="toggle-slider"></span>
+        </label>
+        <label>Link to next exercise (superset)</label>
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-modal-save" onclick="saveExercise()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TIMER_BASE = "https://acaciard16-ai.github.io/workout-timer/workout-timer.html";
+let exercises = [];
+let editIndex = -1;
+
+// --- PRESETS ---
+function loadPreset(key) {
+  if (key === 'clear') { exercises = []; render(); return; }
+  const presets = {
+    emom: [
+      { name: "Kettlebell Swing", weight: "20kg", sets: 10, reps: 10, work: 30, rest: 30, linked: false }
+    ],
+    circuit: [
+      { name: "Push-Ups", weight: "BW", sets: 3, reps: 15, work: 30, rest: 60, linked: false },
+      { name: "Squats", weight: "BW", sets: 3, reps: 15, work: 30, rest: 60, linked: false },
+      { name: "Plank", weight: "BW", sets: 3, reps: 1, work: 45, rest: 30, linked: false }
+    ],
+    superset: [
+      { name: "Bicep Curls", weight: "12kg", sets: 4, reps: 10, work: 25, rest: 60, linked: true },
+      { name: "Tricep Extensions", weight: "12kg", sets: 4, reps: 10, work: 25, rest: 60, linked: false }
+    ]
+  };
+  exercises = presets[key] || [];
+  render();
+}
+
+// --- MODAL ---
+function openModal(idx) {
+  editIndex = typeof idx === 'number' ? idx : -1;
+  document.getElementById('modalTitle').textContent = editIndex >= 0 ? 'Edit Exercise' : 'Add Exercise';
+  const ex = editIndex >= 0 ? exercises[editIndex] : null;
+  document.getElementById('mName').value = ex ? ex.name : '';
+  const wp = ex ? parseWeight(ex.weight) : { val: '', unit: 'kg' };
+  document.getElementById('mWeight').value = wp.val;
+  document.getElementById('mUnit').value = wp.unit;
+  document.getElementById('mSets').value = ex ? ex.sets : '';
+  document.getElementById('mReps').value = ex ? ex.reps : '';
+  document.getElementById('mWork').value = ex ? ex.work : '';
+  document.getElementById('mRest').value = ex ? ex.rest : '';
+  document.getElementById('mSuperset').checked = ex ? ex.linked : false;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  document.getElementById('mName').focus();
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.add('hidden');
+  editIndex = -1;
+}
+
+function parseWeight(w) {
+  if (!w || w === 'BW') return { val: '', unit: 'BW' };
+  const m = String(w).match(/^([\d.]+)\s*(kg|lbs)?$/i);
+  if (m) return { val: m[1], unit: m[2] || 'kg' };
+  return { val: w, unit: 'kg' };
+}
+
+function saveExercise() {
+  const name = document.getElementById('mName').value.trim();
+  if (!name) { showToast('Exercise name is required'); return; }
+  const wVal = document.getElementById('mWeight').value.trim();
+  const wUnit = document.getElementById('mUnit').value;
+  let weight = 'BW';
+  if (wUnit === 'BW') weight = 'BW';
+  else if (wVal) weight = wVal + wUnit;
+  else weight = 'BW';
+
+  const sets = parseInt(document.getElementById('mSets').value) || 4;
+  const reps = parseInt(document.getElementById('mReps').value) || 10;
+  const work = parseInt(document.getElementById('mWork').value) || 30;
+  const rest = parseInt(document.getElementById('mRest').value) || 60;
+  const linked = document.getElementById('mSuperset').checked;
+
+  const ex = { name, weight, sets, reps, work, rest, linked };
+
+  if (editIndex >= 0) {
+    exercises[editIndex] = ex;
+  } else {
+    exercises.push(ex);
+  }
+  closeModal();
+  render();
+}
+
+// --- RENDER ---
+function render() {
+  renderList();
+  generateUrls();
+}
+
+function getSupersetGroups() {
+  const groups = [];
+  let i = 0;
+  while (i < exercises.length) {
+    if (exercises[i].linked) {
+      const start = i;
+      while (i < exercises.length && exercises[i].linked) i++;
+      if (i < exercises.length) i++; // include last in group
+      groups.push({ start, end: i - 1 });
+    } else {
+      i++;
+    }
+  }
+  return groups;
+}
+
+function renderList() {
+  const el = document.getElementById('exerciseList');
+  if (!exercises.length) {
+    el.innerHTML = '<div class="empty-state">No exercises yet. Add one above or pick a quick start.</div>';
+    return;
+  }
+
+  const ssGroups = getSupersetGroups();
+  function ssRole(idx) {
+    for (const g of ssGroups) {
+      if (idx === g.start) return 'top';
+      if (idx === g.end) return 'bot';
+      if (idx > g.start && idx < g.end) return 'mid';
+    }
+    return null;
+  }
+  function isGroupStart(idx) {
+    return ssGroups.some(g => g.start === idx);
+  }
+
+  let html = '';
+  exercises.forEach((ex, i) => {
+    const role = ssRole(i);
+    const cls = role ? ` ss-${role}` : '';
+    if (isGroupStart(i)) {
+      html += `<div class="ss-label">Superset</div>`;
+    }
+    html += `<div class="ex-card${cls}">
+      <div class="ex-header">
+        <span class="ex-name">${esc(ex.name)}</span>
+        <div class="ex-actions">
+          <button onclick="moveEx(${i},-1)" title="Move up">↑</button>
+          <button onclick="moveEx(${i},1)" title="Move down">↓</button>
+          <button onclick="openModal(${i})" title="Edit">✎</button>
+          <button onclick="removeEx(${i})" title="Remove">×</button>
+        </div>
+      </div>
+      <div class="ex-detail">${esc(ex.weight)} · ${ex.sets}×${ex.reps} · ${ex.work}s work / ${ex.rest}s rest</div>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function removeEx(i) { exercises.splice(i, 1); render(); }
+
+function moveEx(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= exercises.length) return;
+  [exercises[i], exercises[j]] = [exercises[j], exercises[i]];
+  render();
+}
+
+// --- URL GENERATION ---
+function generateUrls() {
+  if (!exercises.length) {
+    document.getElementById('urlB64').textContent = 'Add exercises to generate URL';
+    document.getElementById('urlPlain').textContent = '';
+    document.getElementById('b64Count').textContent = '';
+    document.getElementById('plainCount').textContent = '';
+    document.getElementById('estTime').textContent = '';
+    return;
+  }
+
+  const athlete = document.getElementById('athleteName').value.trim();
+  // Build V2 compact string
+  const ref = genRef();
+  let v2 = '@' + ref + (athlete ? ',' + athlete : '') + ';';
+  v2 += exercises.map(ex => {
+    let flags = '';
+    if (ex.linked) flags += 's';
+    const parts = [ex.name, ex.weight, ex.sets, ex.reps, ex.work, ex.rest];
+    if (flags) parts.push(flags);
+    return parts.join(',');
+  }).join(';');
+
+  // Base64url
+  const b64raw = btoa(unescape(encodeURIComponent(v2)));
+  const b64url = b64raw.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const fullB64 = TIMER_BASE + '#' + b64url;
+
+  // Plaintext (percent-encoded)
+  const fullPlain = TIMER_BASE + '#' + encodeURIComponent(v2);
+
+  document.getElementById('urlB64').textContent = fullB64;
+  document.getElementById('urlPlain').textContent = fullPlain;
+
+  const b64Len = fullB64.length;
+  const plainLen = fullPlain.length;
+  const b64El = document.getElementById('b64Count');
+  const plainEl = document.getElementById('plainCount');
+  b64El.textContent = b64Len + ' chars';
+  b64El.className = 'char-count' + (b64Len > 350 ? ' warn' : '');
+  plainEl.textContent = plainLen + ' chars';
+  plainEl.className = 'char-count' + (plainLen > 350 ? ' warn' : '');
+
+  // Estimate time
+  document.getElementById('estTime').textContent = 'Est. ' + formatTime(estimateTotal()) + ' total';
+}
+
+function genRef() {
+  // Simple 6-char hex from exercise content
+  const content = exercises.map(e => e.name + e.weight + e.sets + e.reps + e.work + e.rest).join('|');
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    hash = ((hash << 5) - hash + content.charCodeAt(i)) | 0;
+  }
+  return ('000000' + (Math.abs(hash) % 0xFFFFFF).toString(16)).slice(-6);
+}
+
+// --- TIME ESTIMATION ---
+function estTime(ex) {
+  return ex.work * ex.sets + ex.rest * (ex.sets - 1);
+}
+
+function estSupersetTime(group) {
+  const exs = group.map(ex => ({ work: ex.work, rest: ex.rest, setsLeft: ex.sets }));
+  let total = 0;
+  while (exs.some(e => e.setsLeft > 0)) {
+    const active = exs.filter(e => e.setsLeft > 0);
+    active.forEach((e, i) => {
+      total += e.work;
+      if (i < active.length - 1) total += 5; // buffer
+    });
+    active.forEach(e => e.setsLeft--);
+    const stillActive = exs.filter(e => e.setsLeft > 0);
+    if (stillActive.length > 0) {
+      total += Math.max(...stillActive.map(e => e.rest));
+    }
+  }
+  return total;
+}
+
+function estimateTotal() {
+  let total = 0;
+  let i = 0;
+  while (i < exercises.length) {
+    if (exercises[i].linked) {
+      const group = [exercises[i]];
+      let j = i;
+      while (j < exercises.length && exercises[j].linked) { j++; group.push(exercises[j]); }
+      // j is now the last in group (no linked flag)
+      if (j < exercises.length) j++;
+      // group may have picked up undefined if linked flag is on the last exercise
+      const validGroup = group.filter(Boolean);
+      total += validGroup.length > 1 ? estSupersetTime(validGroup) : estTime(validGroup[0]);
+      i = j;
+    } else {
+      total += estTime(exercises[i]);
+      i++;
+    }
+  }
+  return total;
+}
+
+function formatTime(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+// --- ACTIONS ---
+function openTimer(mode) {
+  if (!exercises.length) return;
+  const url = mode === 'plain'
+    ? document.getElementById('urlPlain').textContent
+    : document.getElementById('urlB64').textContent;
+  window.open(url, '_blank');
+}
+
+function copyUrl(mode) {
+  const text = mode === 'plain'
+    ? document.getElementById('urlPlain').textContent
+    : document.getElementById('urlB64').textContent;
+  if (!text || text.startsWith('Add exercises')) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById(mode === 'plain' ? 'btnCopyPlain' : 'btnCopyB64');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = mode === 'plain' ? 'Copy Plaintext' : 'Copy Compact';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// --- HELP TOGGLE ---
+function toggleHelp() {
+  const toggle = document.getElementById('helpToggle');
+  const body = document.getElementById('helpBody');
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open');
+  toggle.classList.toggle('open');
+}
+
+// --- KEYBOARD ---
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Enter' && !document.getElementById('modalOverlay').classList.contains('hidden')) {
+    saveExercise();
+  }
+});
+
+// --- ATHLETE NAME CHANGE ---
+document.getElementById('athleteName').addEventListener('input', generateUrls);
+
+// --- INIT ---
+render();
+</script>
+</body>
+</html>
