@@ -257,6 +257,10 @@ function loadState() {
     if (!raw) return;
     const data = JSON.parse(raw);
     if (data.exercises && data.exercises.length) {
+      // Validate: discard cache if any exercise has NaN fields (stale bad parse)
+      const valid = data.exercises.every(e =>
+        e.name && !isNaN(e.sets) && !isNaN(e.reps) && !isNaN(e.work) && !isNaN(e.rest));
+      if (!valid) { localStorage.removeItem(saveKey); return null; }
       // Replace entire list — preserves adds, deletes, reorder, done flags
       exercises = data.exercises.map(e => ({ ...e }));
     }
